@@ -6,8 +6,8 @@ import io
 # ================================
 # 📘 Mini Facebook Clone + Profile Pics
 # ================================
-st.set_page_config(page_title="FeedChat", page_icon="📘", layout="centered")
-st.title("FeedChat")
+st.set_page_config(page_title="Mini Facebook", page_icon="📘", layout="centered")
+st.title("📘 Mini Facebook Clone")
 
 # -------------------------------
 # Database Setup
@@ -103,7 +103,10 @@ def get_user(username):
     c.execute("SELECT username, profile_pic FROM users WHERE username=?", (username,))
     user = c.fetchone()
     conn.close()
-    return user
+    if user:
+        return user  # (username, profile_pic)
+    else:
+        return (username, None)  # fallback so unpacking never fails
 
 def get_all_users():
     conn = sqlite3.connect("facebook_clone.db")
@@ -377,4 +380,3 @@ if st.session_state.logged_in:
                     with colm2:
                         st.markdown(f"**{su}** ({t}): {m}")
                     st.markdown("---")
-
