@@ -52,26 +52,36 @@ def init_db():
             following TEXT
         )
     ''')
-    # Likes
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS likes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id INTEGER,
-            username TEXT
-        )
-    ''')
-    # Comments
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS comments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            post_id INTEGER,
-            username TEXT,
-            comment TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
+  # Likes
+col1, col2 = st.columns([1, 5])
+with col1:
+    if has_liked(post_id, st.session_state.username):
+        if st.button("Unlike", key=f"unlike_{post_id}_{user}"):
+            unlike_post(post_id, st.session_state.username)
+            st.experimental_rerun()
+    else:
+        if st.button("Like", key=f"like_{post_id}_{user}"):
+            like_post(post_id, st.session_state.username)
+            st.experimental_rerun()
+with col2:
+    st.write(f"👍 {count_likes(post_id)} likes")
+
+# Comments
+st.markdown("💬 Comments:")
+comments = get_comments(post_id)
+for cu, cm, ct in comments:
+    st.markdown(f"**{cu}**: {cm}  ⏱ {ct}")
+
+comment_input = st.text_input(
+    f"Add comment to post {post_id}", 
+    key=f"comment_input_{post_id}"
+)
+if st.button("Comment", key=f"comment_btn_{post_id}"):
+    if comment_input.strip():
+        add_comment(post_id, st.session_state.username, comment_input)
+        st.experimental_rerun()
+st.markdown("---")
+
 
 # -------------------------------
 # User Functions
@@ -380,3 +390,4 @@ if st.session_state.logged_in:
                     with colm2:
                         st.markdown(f"**{su}** ({t}): {m}")
                     st.markdown("---")
+
