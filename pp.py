@@ -206,4 +206,6 @@ if "username" in st.session_state:
             if st.button("Send"):
                 if new_msg.strip():
                     send_message(st.session_state.username, other_user, new_msg)
-                    st.experimental_rerun()
+                    st.rerun()
+
+
