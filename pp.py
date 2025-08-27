@@ -6,7 +6,7 @@ from datetime import datetime
 # ----------------------
 # Database Setup
 # ----------------------
-conn = sqlite3.connect("facebook_clone.db", check_same_thread=False)
+conn = sqlite3.connect("feedchat.db", check_same_thread=False)  # renamed DB file
 c = conn.cursor()
 
 c.execute('''CREATE TABLE IF NOT EXISTS users
@@ -89,8 +89,8 @@ def get_messages(user1, user2):
 # ----------------------
 # Streamlit App
 # ----------------------
-st.set_page_config(page_title="Mini Facebook Clone", page_icon="📘", layout="wide")
-st.title("📘 Mini Facebook Clone")
+st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide")
+st.title("💬 FeedChat")
 
 # Sidebar - Login / Register
 st.sidebar.header("👤 User Login / Register")
@@ -207,4 +207,3 @@ if "username" in st.session_state:
                 if new_msg.strip():
                     send_message(st.session_state.username, other_user, new_msg)
                     st.experimental_rerun()
-
