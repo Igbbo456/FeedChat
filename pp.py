@@ -70,7 +70,6 @@ for post in posts:
     # ---- LIKE BUTTON ----
     col1, col2 = st.columns([1, 5])
     with col1:
-        if has_liked(post_id, st.session_state.username):
             if st.button("Unlike", key=f"unlike_{post_id}"):
                 unlike_post(post_id, st.session_state.username)
                 st.experimental_rerun()
@@ -406,5 +405,6 @@ if st.session_state.logged_in:
                     with colm2:
                         st.markdown(f"**{su}** ({t}): {m}")
                     st.markdown("---")
+
 
 
