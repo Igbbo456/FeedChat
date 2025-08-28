@@ -6,7 +6,7 @@ from datetime import datetime
 # ----------------------
 # Database Setup
 # ----------------------
-conn = sqlite3.connect("feedchat.db", check_same_thread=False)  # renamed DB file
+conn = sqlite3.connect("feedchat.db", check_same_thread=False)
 c = conn.cursor()
 
 c.execute('''CREATE TABLE IF NOT EXISTS users
@@ -146,11 +146,11 @@ if "username" in st.session_state:
                     if has_liked(post_id, st.session_state.username):
                         if st.button("Unlike", key=f"unlike_{post_id}"):
                             unlike_post(post_id, st.session_state.username)
-                            st.experimental_rerun()
+                            st.rerun()
                     else:
                         if st.button("Like", key=f"like_{post_id}"):
                             like_post(post_id, st.session_state.username)
-                            st.experimental_rerun()
+                            st.rerun()
                 with col2:
                     st.write(f"👍 {count_likes(post_id)} likes")
 
@@ -170,7 +170,7 @@ if "username" in st.session_state:
                 if st.button("Comment", key=f"comment_btn_{post_id}"):
                     if comment_input.strip():
                         add_comment(post_id, st.session_state.username, comment_input)
-                        st.experimental_rerun()
+                        st.rerun()
                 st.markdown("---")
 
     # Create Post
@@ -188,9 +188,7 @@ if "username" in st.session_state:
                     img_bytes = img_bytes.getvalue()
                 add_post(st.session_state.username, msg, img_bytes)
                 st.success("✅ Post created!")
-                File "mount/src/feedchat/pp.py", line 191, in <module>
-                st.experimental_rerun()
-    
+                st.rerun()
             else:
                 st.warning("Please write something or upload an image.")
 
@@ -209,7 +207,3 @@ if "username" in st.session_state:
                 if new_msg.strip():
                     send_message(st.session_state.username, other_user, new_msg)
                     st.rerun()
-
-
-
-
