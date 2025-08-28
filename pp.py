@@ -1,15 +1,7 @@
 import streamlit as st
-import sqlite3
-import io
-import datetime
+import sqlite3, io
 from PIL import Image
-
-# Optional: Video call support (requires streamlit-webrtc)
-try:
-    from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-    WEBCAM_AVAILABLE = True
-except ModuleNotFoundError:
-    WEBCAM_AVAILABLE = False
+import datetime
 
 # ==============================
 # DATABASE SETUP
@@ -17,13 +9,14 @@ except ModuleNotFoundError:
 conn = sqlite3.connect("feedchat.db", check_same_thread=False)
 c = conn.cursor()
 
-# Users table
+# Users
 c.execute("""CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
-    password TEXT
+    password TEXT,
+    profile_pic BLOB
 )""")
 
-# Posts table (media can be image or video)
+# Posts (media can be image or video)
 c.execute("""CREATE TABLE IF NOT EXISTS posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT,
@@ -33,13 +26,13 @@ c.execute("""CREATE TABLE IF NOT EXISTS posts (
     timestamp TEXT
 )""")
 
-# Likes table
+# Likes
 c.execute("""CREATE TABLE IF NOT EXISTS likes (
     post_id INTEGER,
     username TEXT
 )""")
 
-# Comments table
+# Comments
 c.execute("""CREATE TABLE IF NOT EXISTS comments (
     post_id INTEGER,
     username TEXT,
@@ -47,13 +40,13 @@ c.execute("""CREATE TABLE IF NOT EXISTS comments (
     timestamp TEXT
 )""")
 
-# Follows table
+# Follows
 c.execute("""CREATE TABLE IF NOT EXISTS follows (
     follower TEXT,
     following TEXT
 )""")
 
-# Messages table
+# Messages
 c.execute("""CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sender TEXT,
@@ -62,7 +55,7 @@ c.execute("""CREATE TABLE IF NOT EXISTS messages (
     timestamp TEXT
 )""")
 
-# Notifications table
+# Notifications
 c.execute("""CREATE TABLE IF NOT EXISTS notifications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT,
@@ -72,16 +65,6 @@ c.execute("""CREATE TABLE IF NOT EXISTS notifications (
 )""")
 
 conn.commit()
-
-# ==============================
-# FIX: Add profile_pic if missing
-# ==============================
-try:
-    c.execute("ALTER TABLE users ADD COLUMN profile_pic BLOB")
-    conn.commit()
-except sqlite3.OperationalError:
-    # Column already exists
-    pass
 
 # ==============================
 # HELPER FUNCTIONS
@@ -213,9 +196,7 @@ def count_total_likes(username):
     r = c.fetchone()
     return r[0] if r else 0
 
-# -----------------------------
-# SOUND FUNCTION
-# -----------------------------
+# Sound
 def play_sound(sound_url):
     st.markdown(f"""
     <audio autoplay="true">
@@ -229,13 +210,13 @@ def play_sound(sound_url):
 st.set_page_config(page_title="FeedChat", layout="wide")
 st.title("📘 FeedChat")
 
-# --- Session defaults ---
+# Session defaults
 if "username" not in st.session_state:
     st.session_state.username = None
 if "view_profile" not in st.session_state:
     st.session_state.view_profile = None
 
-# --- Authentication ---
+# Authentication
 if not st.session_state.username:
     st.sidebar.header("Login / Register")
     choice = st.sidebar.selectbox("I want to:", ["Login", "Register"])
@@ -263,7 +244,7 @@ if not st.session_state.username:
                 st.sidebar.error("Invalid credentials.")
     st.stop()
 
-# --- Top bar ---
+# Top bar + logout
 col_left, col_right = st.columns([8,1])
 with col_left:
     st.write(f"Logged in as **{st.session_state.username}**")
@@ -273,13 +254,15 @@ with col_right:
         st.session_state.view_profile = None
         st.experimental_rerun()
 
-# --- Play notification sound ---
+# Notifications sound
 notes = get_notifications(st.session_state.username)
 unseen_notes = [n for n in notes if n[3]==0]
 if unseen_notes:
     play_sound("https://www.soundjay.com/buttons/sounds/button-3.mp3")
 
-# --- FEED / POSTS ---
+# -----------------------------
+# HOME / FEED
+# -----------------------------
 st.header("📰 Home / News Feed")
 with st.expander("✍️ Create a post"):
     post_text = st.text_area("What's on your mind?", key="home_post_text")
@@ -303,57 +286,64 @@ with st.expander("✍️ Create a post"):
             st.success("Posted!")
             st.experimental_rerun()
 
-# --- Display feed ---
+# Display feed
 posts = get_posts()
-for pid, user, msg, media, mtype, ts in posts:
-    card = st.container()
-    with card:
-        col1, col2 = st.columns([1,9])
-        with col1:
-            u = get_user(user)
-            if u and u[1]:
-                st.image(u[1], width=60)
-            else:
-                st.write("👤")
-        with col2:
-            st.markdown(f"**{user}**  ·  _{ts}_")
-            if msg:
-                st.write(msg)
-            if media and mtype=="image":
-                st.image(media, use_container_width=True)
-            elif media and mtype=="video":
-                st.video(media)
-
-            # Like / Unlike
-            like_col, info_col = st.columns([1,4])
-            with like_col:
-                if has_liked(pid, st.session_state.username):
-                    if st.button(f"Unlike ({count_likes(pid)})", key=f"unlike_{pid}"):
-                        unlike_post_db(pid, st.session_state.username)
-                        st.experimental_rerun()
+if not posts:
+    st.info("No posts yet.")
+else:
+    for pid, user, msg, media, mtype, ts in posts:
+        card = st.container()
+        with card:
+            col1, col2 = st.columns([1,9])
+            with col1:
+                u = get_user(user)
+                if u and u[1]:
+                    st.image(u[1], width=60)
                 else:
-                    if st.button(f"Like ({count_likes(pid)})", key=f"like_{pid}"):
-                        like_post_db(pid, st.session_state.username)
+                    st.write("👤")
+            with col2:
+                st.markdown(f"**{user}**  ·  _{ts}_")
+                if msg:
+                    st.write(msg)
+                if media and mtype=="image":
+                    st.image(media, use_container_width=True)
+                elif media and mtype=="video":
+                    st.video(media)
+
+                # Like / Unlike
+                like_col, info_col = st.columns([1,4])
+                with like_col:
+                    if has_liked(pid, st.session_state.username):
+                        if st.button(f"Unlike ({count_likes(pid)})", key=f"unlike_{pid}"):
+                            unlike_post_db(pid, st.session_state.username)
+                            st.experimental_rerun()
+                    else:
+                        if st.button(f"Like ({count_likes(pid)})", key=f"like_{pid}"):
+                            like_post_db(pid, st.session_state.username)
+                            st.experimental_rerun()
+                with info_col:
+                    st.write(f"👍 {count_likes(pid)}  ·  💬 {len(get_comments(pid))}")
+
+                # Comments
+                st.markdown("**Comments**")
+                for cu, cm, ct in get_comments(pid):
+                    cu_user = get_user(cu)
+                    cols = st.columns([1,9])
+                    if cu_user and cu_user[1]:
+                        cols[0].image(cu_user[1], width=30)
+                    cols[1].markdown(f"**{cu}**: {cm}  _({ct})_")
+
+                comment_text = st.text_input("Add a comment", key=f"comment_input_{pid}")
+                if st.button("Post comment", key=f"comment_btn_{pid}"):
+                    if comment_text.strip():
+                        add_comment(pid, st.session_state.username, comment_text.strip())
                         st.experimental_rerun()
-            with info_col:
-                st.write(f"👍 {count_likes(pid)}  ·  💬 {len(get_comments(pid))}")
 
-            # Comments
-            st.markdown("**Comments**")
-            for cu, cm, ct in get_comments(pid):
-                cu_user = get_user(cu)
-                cols = st.columns([1,9])
-                if cu_user and cu_user[1]:
-                    cols[0].image(cu_user[1], width=30)
-                cols[1].markdown(f"**{cu}**: {cm}  _({ct})_")
-            comment_text = st.text_input("Add a comment", key=f"comment_input_{pid}")
-            if st.button("Post comment", key=f"comment_btn_{pid}"):
-                if comment_text.strip():
-                    add_comment(pid, st.session_state.username, comment_text.strip())
-                    st.experimental_rerun()
-    st.markdown("---")
+        st.markdown("---")
 
-# --- PROFILE ---
+# -----------------------------
+# PROFILE tab
+# -----------------------------
 st.header("👤 Profile")
 target = st.session_state.view_profile or st.session_state.username
 user_row = get_user(target)
@@ -383,20 +373,25 @@ if target != st.session_state.username:
         st.session_state.view_profile = None
         st.experimental_rerun()
 
-# Show their posts
+# Show posts of profile
 their_posts = [p for p in get_posts() if p[1]==target]
-for pid, user, msg, media, mtype, ts in their_posts:
-    st.markdown(f"**{user}** · _{ts}_")
-    if msg:
-        st.write(msg)
-    if media and mtype=="image":
-        st.image(media, use_container_width=True)
-    elif media and mtype=="video":
-        st.video(media)
-    st.caption(f"❤️ {count_likes(pid)} likes")
-    st.markdown("---")
+if not their_posts:
+    st.info("No posts yet.")
+else:
+    for pid, user, msg, media, mtype, ts in their_posts:
+        st.markdown(f"**{user}** · _{ts}_")
+        if msg:
+            st.write(msg)
+        if media and mtype=="image":
+            st.image(media, use_container_width=True)
+        elif media and mtype=="video":
+            st.video(media)
+        st.caption(f"❤️ {count_likes(pid)} likes")
+        st.markdown("---")
 
-# --- MESSAGES ---
+# -----------------------------
+# MESSAGES
+# -----------------------------
 st.header("💬 Messages")
 with st.expander("Send a message"):
     to_user = st.text_input("To (username)", key="msg_to")
@@ -418,4 +413,18 @@ if chat_with:
         st.info("No messages yet.")
     else:
         for s, m, ts in conv:
-            st.markdown(f"**{s
+            st.markdown(f"**{s}** ({ts}): {m}")
+
+# -----------------------------
+# NOTIFICATIONS
+# -----------------------------
+st.header("🔔 Notifications")
+notes = get_notifications(st.session_state.username)
+if not notes:
+    st.info("No notifications.")
+else:
+    for nid, msg, ts, seen in notes:
+        st.markdown(f"- {'✅' if seen else '🆕'} {msg}  _({ts})_")
+if st.button("Mark notifications read"):
+    mark_notifications_seen(st.session_state.username)
+    st.experimental_rerun()
