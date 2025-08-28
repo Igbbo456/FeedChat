@@ -188,7 +188,7 @@ if "username" in st.session_state:
                     img_bytes = img_bytes.getvalue()
                 add_post(st.session_state.username, msg, img_bytes)
                 st.success("✅ Post created!")
-                File "/mount/src/feedchat/pp.py", line 191, in <module>
+                File "mount/src/feedchat/pp.py", line 191, in <module>
                 st.experimental_rerun()
     
             else:
@@ -209,6 +209,7 @@ if "username" in st.session_state:
                 if new_msg.strip():
                     send_message(st.session_state.username, other_user, new_msg)
                     st.rerun()
+
 
 
 
