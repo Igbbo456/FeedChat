@@ -1,78 +1,90 @@
 import streamlit as st
-import sqlite3
-import datetime
-import io
+import sqlite3, io, datetime
 from PIL import Image
 
-# =====================================
-# 1️⃣ Database Setup
-# =====================================
+# ==============================
+# DATABASE SETUP
+# ==============================
 conn = sqlite3.connect("feedchat.db", check_same_thread=False)
 c = conn.cursor()
 
-# Users
-c.execute("""CREATE TABLE IF NOT EXISTS users (
+# Users table
+c.execute("""
+CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY,
     password TEXT,
     profile_pic BLOB
-)""")
+)
+""")
 
-# Posts (image/video)
-c.execute("""CREATE TABLE IF NOT EXISTS posts (
+# Posts table
+c.execute("""
+CREATE TABLE IF NOT EXISTS posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT,
     message TEXT,
     media BLOB,
     media_type TEXT,
     timestamp TEXT
-)""")
+)
+""")
 
-# Likes
-c.execute("""CREATE TABLE IF NOT EXISTS likes (
+# Likes table
+c.execute("""
+CREATE TABLE IF NOT EXISTS likes (
     post_id INTEGER,
     username TEXT
-)""")
+)
+""")
 
-# Comments
-c.execute("""CREATE TABLE IF NOT EXISTS comments (
+# Comments table
+c.execute("""
+CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     post_id INTEGER,
     username TEXT,
     comment TEXT,
     timestamp TEXT
-)""")
+)
+""")
 
-# Follows
-c.execute("""CREATE TABLE IF NOT EXISTS follows (
+# Follows table
+c.execute("""
+CREATE TABLE IF NOT EXISTS follows (
     follower TEXT,
     following TEXT
-)""")
+)
+""")
 
-# Messages
-c.execute("""CREATE TABLE IF NOT EXISTS messages (
+# Messages table
+c.execute("""
+CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sender TEXT,
     receiver TEXT,
     message TEXT,
     timestamp TEXT
-)""")
+)
+""")
 
-# Notifications
-c.execute("""CREATE TABLE IF NOT EXISTS notifications (
+# Notifications table
+c.execute("""
+CREATE TABLE IF NOT EXISTS notifications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT,
     message TEXT,
     timestamp TEXT,
     seen INTEGER
-)""")
+)
+""")
 
 conn.commit()
 
-# =====================================
-# 2️⃣ Helper Functions
-# =====================================
+# ==============================
+# HELPER FUNCTIONS
+# ==============================
 
-# Users
+# --- Users ---
 def add_user(username, password, profile_pic=None):
     try:
         c.execute("INSERT INTO users (username, password, profile_pic) VALUES (?, ?, ?)",
@@ -89,23 +101,22 @@ def verify_user(username, password):
     c.execute("SELECT 1 FROM users WHERE username=? AND password=?", (username, password))
     return c.fetchone() is not None
 
-# Posts
+# --- Posts ---
 def add_post(username, message, media=None, media_type=None):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO posts (username, message, media, media_type, timestamp) VALUES (?, ?, ?, ?, ?)",
               (username, message, media, media_type, ts))
     conn.commit()
-    # Notify followers
+    # notify followers
     c.execute("SELECT follower FROM follows WHERE following=?", (username,))
-    followers = c.fetchall()
-    for (f,) in followers:
-        add_notification(f, f"{username} posted: {(message or '')[:80]}")
+    for (f,) in c.fetchall():
+        add_notification(f, f"{username} posted: { (message or '')[:80] }")
 
 def get_posts():
     c.execute("SELECT id, username, message, media, media_type, timestamp FROM posts ORDER BY id DESC")
     return c.fetchall()
 
-# Likes
+# --- Likes ---
 def has_liked(post_id, username):
     c.execute("SELECT 1 FROM likes WHERE post_id=? AND username=?", (post_id, username))
     return c.fetchone() is not None
@@ -124,7 +135,7 @@ def count_likes(post_id):
     r = c.fetchone()
     return r[0] if r else 0
 
-# Comments
+# --- Comments ---
 def add_comment(post_id, username, comment):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO comments (post_id, username, comment, timestamp) VALUES (?, ?, ?, ?)",
@@ -135,7 +146,7 @@ def get_comments(post_id):
     c.execute("SELECT username, comment, timestamp FROM comments WHERE post_id=? ORDER BY id ASC", (post_id,))
     return c.fetchall()
 
-# Follows
+# --- Follows ---
 def follow_user(follower, following):
     if follower != following and not is_following(follower, following):
         c.execute("INSERT INTO follows (follower, following) VALUES (?, ?)", (follower, following))
@@ -157,7 +168,7 @@ def get_following(username):
     c.execute("SELECT following FROM follows WHERE follower=?", (username,))
     return [r[0] for r in c.fetchall()]
 
-# Messages
+# --- Messages ---
 def send_message(sender, receiver, message):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO messages (sender, receiver, message, timestamp) VALUES (?, ?, ?, ?)",
@@ -171,7 +182,7 @@ def get_messages(user1, user2):
                  ORDER BY id ASC""", (user1, user2, user2, user1))
     return c.fetchall()
 
-# Notifications
+# --- Notifications ---
 def add_notification(username, message):
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO notifications (username, message, timestamp, seen) VALUES (?, ?, ?, 0)",
@@ -196,7 +207,7 @@ def count_total_likes(username):
     r = c.fetchone()
     return r[0] if r else 0
 
-# Sound
+# --- Audio notification ---
 def play_sound(sound_url):
     st.markdown(f"""
     <audio autoplay="true">
@@ -204,26 +215,23 @@ def play_sound(sound_url):
     </audio>
     """, unsafe_allow_html=True)
 
-# =====================================
-# 3️⃣ Streamlit UI
-# =====================================
+# ==============================
+# STREAMLIT UI
+# ==============================
 st.set_page_config(page_title="FeedChat", layout="wide")
 st.title("📘 FeedChat")
 
-# Session defaults
+# --- Session ---
 if "username" not in st.session_state:
     st.session_state.username = None
 if "view_profile" not in st.session_state:
     st.session_state.view_profile = None
 
-# -------------------
-# Authentication
-# -------------------
+# --- Authentication ---
 if not st.session_state.username:
     st.sidebar.header("Login / Register")
     choice = st.sidebar.selectbox("I want to:", ["Login", "Register"])
     if choice == "Register":
-        st.sidebar.subheader("Create account")
         new_user = st.sidebar.text_input("Username", key="reg_user")
         new_pass = st.sidebar.text_input("Password", type="password", key="reg_pass")
         new_pic = st.sidebar.file_uploader("Profile picture (optional)", type=["png","jpg","jpeg"], key="reg_pic")
@@ -235,7 +243,6 @@ if not st.session_state.username:
                 add_user(new_user.strip(), new_pass, pic_bytes)
                 st.sidebar.success("Account created — now log in.")
     else:
-        st.sidebar.subheader("Log in")
         user = st.sidebar.text_input("Username", key="login_user")
         pw = st.sidebar.text_input("Password", type="password", key="login_pw")
         if st.sidebar.button("Login"):
@@ -246,7 +253,7 @@ if not st.session_state.username:
                 st.sidebar.error("Invalid credentials.")
     st.stop()
 
-# Top bar + logout
+# --- Top bar ---
 col_left, col_right = st.columns([8,1])
 with col_left:
     st.write(f"Logged in as **{st.session_state.username}**")
@@ -256,14 +263,15 @@ with col_right:
         st.session_state.view_profile = None
         st.experimental_rerun()
 
-# Notifications sound
+# --- Notifications ---
 notes = get_notifications(st.session_state.username)
-if any(n[3]==0 for n in notes):
+unseen_notes = [n for n in notes if n[3]==0]
+if unseen_notes:
     play_sound("https://www.soundjay.com/buttons/sounds/button-3.mp3")
 
-# =====================================
-# 📰 Home Feed
-# =====================================
+# ==============================
+# HOME / FEED
+# ==============================
 st.header("📰 Home / News Feed")
 with st.expander("✍️ Create a post"):
     post_text = st.text_area("What's on your mind?", key="home_post_text")
@@ -303,12 +311,15 @@ else:
                 else:
                     st.write("👤")
             with col2:
-                st.markdown(f"**{user}** · _{ts}_")
-                if msg: st.write(msg)
-                if media and mtype=="image": st.image(media, use_container_width=True)
-                elif media and mtype=="video": st.video(media)
+                st.markdown(f"**{user}**  ·  _{ts}_")
+                if msg:
+                    st.write(msg)
+                if media and mtype=="image":
+                    st.image(media, use_container_width=True)
+                elif media and mtype=="video":
+                    st.video(media)
 
-                # Likes
+                # Likes / Comments
                 like_col, info_col = st.columns([1,4])
                 with like_col:
                     if has_liked(pid, st.session_state.username):
@@ -327,7 +338,8 @@ else:
                 for cu, cm, ct in get_comments(pid):
                     cu_user = get_user(cu)
                     cols = st.columns([1,9])
-                    if cu_user and cu_user[1]: cols[0].image(cu_user[1], width=30)
+                    if cu_user and cu_user[1]:
+                        cols[0].image(cu_user[1], width=30)
                     cols[1].markdown(f"**{cu}**: {cm}  _({ct})_")
 
                 comment_text = st.text_input("Add a comment", key=f"comment_input_{pid}")
