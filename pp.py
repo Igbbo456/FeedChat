@@ -130,7 +130,7 @@ def add_comment(post_id, username, comment):
     conn.commit()
 
 def get_comments(post_id):
-    c.execute("SELECT username, comment, timestamp FROM comments WHERE post_id=? ORDER BY rowid ASC", (post_id,))
+    c.execute("SELECT username, comment, timestamp FROM comments WHERE post_id=? ORDER BY id ASC", (post_id,))
     return c.fetchall()
 
 # Follows
@@ -196,7 +196,9 @@ def count_total_likes(username):
     r = c.fetchone()
     return r[0] if r else 0
 
-# Sound
+# -----------------------------
+# SOUND FUNCTION
+# -----------------------------
 def play_sound(sound_url):
     st.markdown(f"""
     <audio autoplay="true">
@@ -210,13 +212,13 @@ def play_sound(sound_url):
 st.set_page_config(page_title="FeedChat", layout="wide")
 st.title("📘 FeedChat")
 
-# Session defaults
+# --- Session defaults ---
 if "username" not in st.session_state:
     st.session_state.username = None
 if "view_profile" not in st.session_state:
     st.session_state.view_profile = None
 
-# Authentication
+# --- Authentication ---
 if not st.session_state.username:
     st.sidebar.header("Login / Register")
     choice = st.sidebar.selectbox("I want to:", ["Login", "Register"])
@@ -254,11 +256,13 @@ with col_right:
         st.session_state.view_profile = None
         st.experimental_rerun()
 
-# Notifications sound
+# -----------------------------
+# FETCH NOTIFICATIONS & PLAY SOUND
+# -----------------------------
 notes = get_notifications(st.session_state.username)
-unseen_notes = [n for n in notes if n[3]==0]
+unseen_notes = [n for n in notes if n[3]==0]  # unseen = seen==0
 if unseen_notes:
-    play_sound("https://www.soundjay.com/buttons/sounds/button-3.mp3")
+    play_sound("https://www.soundjay.com/buttons/sounds/button-3.mp3")  # play sound once
 
 # -----------------------------
 # HOME / FEED
