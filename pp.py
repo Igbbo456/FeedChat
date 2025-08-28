@@ -186,11 +186,6 @@ def mark_notifications_seen(username):
     c.execute("UPDATE notifications SET seen=1 WHERE username=?", (username,))
     conn.commit()
 
-def count_unseen(username):
-    c.execute("SELECT COUNT(*) FROM notifications WHERE username=? AND seen=0", (username,))
-    r = c.fetchone()
-    return r[0] if r else 0
-
 def count_total_likes(username):
     c.execute("""SELECT COUNT(*) FROM likes JOIN posts ON likes.post_id = posts.id WHERE posts.username=?""", (username,))
     r = c.fetchone()
@@ -215,6 +210,8 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "view_profile" not in st.session_state:
     st.session_state.view_profile = None
+if "notified" not in st.session_state:
+    st.session_state.notified = False
 
 # Authentication
 if not st.session_state.username:
@@ -252,13 +249,15 @@ with col_right:
     if st.button("Logout"):
         st.session_state.username = None
         st.session_state.view_profile = None
+        st.session_state.notified = False
         st.experimental_rerun()
 
 # Notifications sound
 notes = get_notifications(st.session_state.username)
 unseen_notes = [n for n in notes if n[3]==0]
-if unseen_notes:
+if unseen_notes and not st.session_state.notified:
     play_sound("https://www.soundjay.com/buttons/sounds/button-3.mp3")
+    st.session_state.notified = True
 
 # -----------------------------
 # HOME / FEED
@@ -298,7 +297,7 @@ else:
             with col1:
                 u = get_user(user)
                 if u and u[1]:
-                    st.image(u[1], width=60)
+                    st.image(io.BytesIO(u[1]), width=60)
                 else:
                     st.write("👤")
             with col2:
@@ -306,9 +305,9 @@ else:
                 if msg:
                     st.write(msg)
                 if media and mtype=="image":
-                    st.image(media, use_container_width=True)
+                    st.image(io.BytesIO(media), use_container_width=True)
                 elif media and mtype=="video":
-                    st.video(media)
+                    st.video(io.BytesIO(media))
 
                 # Like / Unlike
                 like_col, info_col = st.columns([1,4])
@@ -330,7 +329,7 @@ else:
                     cu_user = get_user(cu)
                     cols = st.columns([1,9])
                     if cu_user and cu_user[1]:
-                        cols[0].image(cu_user[1], width=30)
+                        cols[0].image(io.BytesIO(cu_user[1]), width=30)
                     cols[1].markdown(f"**{cu}**: {cm}  _({ct})_")
 
                 comment_text = st.text_input("Add a comment", key=f"comment_input_{pid}")
@@ -348,7 +347,7 @@ st.header("👤 Profile")
 target = st.session_state.view_profile or st.session_state.username
 user_row = get_user(target)
 if user_row and user_row[1]:
-    st.image(user_row[1], width=120)
+    st.image(io.BytesIO(user_row[1]), width=120)
 st.caption(f"Viewing: {target}" if target!=st.session_state.username else "Your profile")
 
 col1, col2, col3 = st.columns(3)
@@ -383,9 +382,9 @@ else:
         if msg:
             st.write(msg)
         if media and mtype=="image":
-            st.image(media, use_container_width=True)
+            st.image(io.BytesIO(media), use_container_width=True)
         elif media and mtype=="video":
-            st.video(media)
+            st.video(io.BytesIO(media))
         st.caption(f"❤️ {count_likes(pid)} likes")
         st.markdown("---")
 
@@ -427,4 +426,5 @@ else:
         st.markdown(f"- {'✅' if seen else '🆕'} {msg}  _({ts})_")
 if st.button("Mark notifications read"):
     mark_notifications_seen(st.session_state.username)
+    st.session_state.notified = True
     st.experimental_rerun()
