@@ -92,31 +92,40 @@ def get_messages(user1, user2):
 st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide")
 st.title("💬 FeedChat")
 
-# Sidebar - Login / Register
+# ----------------------
+# Login / Logout System
+# ----------------------
+if "username" not in st.session_state:
+    st.session_state.username = None
+
 st.sidebar.header("👤 User Login / Register")
-username = st.sidebar.text_input("Enter your username")
-profile_pic_file = st.sidebar.file_uploader("Upload profile picture", type=["png","jpg","jpeg"])
 
-if st.sidebar.button("Save Profile"):
-    if username.strip():
-        pic_bytes = None
-        if profile_pic_file:
-            img = Image.open(profile_pic_file)
-            img_bytes = io.BytesIO()
-            img.save(img_bytes, format="PNG")
-            pic_bytes = img_bytes.getvalue()
-        save_user(username, pic_bytes)
-        st.sidebar.success("✅ Profile saved!")
-
-if username:
-    st.session_state.username = username
+if st.session_state.username:
+    st.sidebar.success(f"✅ Logged in as {st.session_state.username}")
+    if st.sidebar.button("🚪 Logout"):
+        st.session_state.username = None
+        st.rerun()
 else:
-    st.warning("Please enter your username in the sidebar to continue.")
+    username = st.sidebar.text_input("Enter your username")
+    profile_pic_file = st.sidebar.file_uploader("Upload profile picture", type=["png","jpg","jpeg"])
+
+    if st.sidebar.button("Save Profile"):
+        if username.strip():
+            pic_bytes = None
+            if profile_pic_file:
+                img = Image.open(profile_pic_file)
+                img_bytes = io.BytesIO()
+                img.save(img_bytes, format="PNG")
+                pic_bytes = img_bytes.getvalue()
+            save_user(username, pic_bytes)
+            st.session_state.username = username
+            st.sidebar.success("✅ Profile saved & logged in!")
+            st.rerun()
 
 # ----------------------
 # Main Tabs
 # ----------------------
-if "username" in st.session_state:
+if st.session_state.username:
     tab1, tab2, tab3 = st.tabs(["📰 News Feed", "✍️ Create Post", "💬 Messages"])
 
     # News Feed
