@@ -136,7 +136,7 @@ def count_unread_notifications(username):
 # ==============================
 st.set_page_config(page_title="📘 FeedChat", page_icon="📘", layout="centered")
 
-st.title("📘 FeedChat - Mini Facebook Clone")
+st.title("📘 FeedChat")
 
 # ---------------- LOGIN ----------------
 if "username" not in st.session_state:
@@ -261,3 +261,4 @@ with tab5:
         if st.button("Mark all as read"):
             mark_notifications_read(st.session_state.username)
             st.rerun()
+
