@@ -244,7 +244,7 @@ if "username" in st.session_state:
         st.markdown(f"**Username:** {u}")
         st.markdown(f"**Followers:** {count_followers(u)} | **Following:** {count_following(u)}")
 
-        # Follow other users
+        # View other user’s profile
         other_user = st.text_input("Enter username to view profile")
         if other_user:
             ou, opic = get_user(other_user) if get_user(other_user) else (None, None)
@@ -254,6 +254,7 @@ if "username" in st.session_state:
                     st.image(opic, width=100)
                 st.write(f"Followers: {count_followers(ou)} | Following: {count_following(ou)}")
 
+                # Follow / Unfollow
                 if is_following(st.session_state.username, ou):
                     if st.button("Unfollow"):
                         unfollow_user(st.session_state.username, ou)
@@ -263,6 +264,7 @@ if "username" in st.session_state:
                         follow_user(st.session_state.username, ou)
                         st.rerun()
 
+                # Show posts from this user
                 st.write("📸 Their Posts:")
                 their_posts = get_posts(ou)
                 for pid, usr, msg, img, ts in their_posts:
