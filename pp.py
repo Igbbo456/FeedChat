@@ -28,6 +28,9 @@ c.execute('''CREATE TABLE IF NOT EXISTS comments
 c.execute('''CREATE TABLE IF NOT EXISTS messages
              (sender TEXT, receiver TEXT, message TEXT, timestamp TEXT)''')
 
+c.execute('''CREATE TABLE IF NOT EXISTS followers
+             (follower TEXT, following TEXT)''')
+
 conn.commit()
 
 # ----------------------
@@ -46,8 +49,11 @@ def add_post(username, message, image):
               (username, message, image, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()
 
-def get_posts():
-    c.execute("SELECT * FROM posts ORDER BY id DESC")
+def get_posts(user=None):
+    if user:
+        c.execute("SELECT * FROM posts WHERE username=? ORDER BY id DESC", (user,))
+    else:
+        c.execute("SELECT * FROM posts ORDER BY id DESC")
     return c.fetchall()
 
 def like_post(post_id, username):
@@ -86,47 +92,59 @@ def get_messages(user1, user2):
                  ORDER BY timestamp ASC""", (user1, user2, user2, user1))
     return c.fetchall()
 
+# ----- Follow System -----
+def follow_user(follower, following):
+    c.execute("INSERT INTO followers VALUES (?, ?)", (follower, following))
+    conn.commit()
+
+def unfollow_user(follower, following):
+    c.execute("DELETE FROM followers WHERE follower=? AND following=?", (follower, following))
+    conn.commit()
+
+def is_following(follower, following):
+    c.execute("SELECT * FROM followers WHERE follower=? AND following=?", (follower, following))
+    return c.fetchone() is not None
+
+def count_followers(user):
+    c.execute("SELECT COUNT(*) FROM followers WHERE following=?", (user,))
+    return c.fetchone()[0]
+
+def count_following(user):
+    c.execute("SELECT COUNT(*) FROM followers WHERE follower=?", (user,))
+    return c.fetchone()[0]
+
 # ----------------------
 # Streamlit App
 # ----------------------
 st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide")
 st.title("💬 FeedChat")
 
-# ----------------------
-# Login / Logout System
-# ----------------------
-if "username" not in st.session_state:
-    st.session_state.username = None
-
+# Sidebar - Login / Register
 st.sidebar.header("👤 User Login / Register")
+username = st.sidebar.text_input("Enter your username")
+profile_pic_file = st.sidebar.file_uploader("Upload profile picture", type=["png","jpg","jpeg"])
 
-if st.session_state.username:
-    st.sidebar.success(f"✅ Logged in as {st.session_state.username}")
-    if st.sidebar.button("🚪 Logout"):
-        st.session_state.username = None
-        st.rerun()
+if st.sidebar.button("Save Profile"):
+    if username.strip():
+        pic_bytes = None
+        if profile_pic_file:
+            img = Image.open(profile_pic_file)
+            img_bytes = io.BytesIO()
+            img.save(img_bytes, format="PNG")
+            pic_bytes = img_bytes.getvalue()
+        save_user(username, pic_bytes)
+        st.sidebar.success("✅ Profile saved!")
+
+if username:
+    st.session_state.username = username
 else:
-    username = st.sidebar.text_input("Enter your username")
-    profile_pic_file = st.sidebar.file_uploader("Upload profile picture", type=["png","jpg","jpeg"])
-
-    if st.sidebar.button("Save Profile"):
-        if username.strip():
-            pic_bytes = None
-            if profile_pic_file:
-                img = Image.open(profile_pic_file)
-                img_bytes = io.BytesIO()
-                img.save(img_bytes, format="PNG")
-                pic_bytes = img_bytes.getvalue()
-            save_user(username, pic_bytes)
-            st.session_state.username = username
-            st.sidebar.success("✅ Profile saved & logged in!")
-            st.rerun()
+    st.warning("Please enter your username in the sidebar to continue.")
 
 # ----------------------
 # Main Tabs
 # ----------------------
-if st.session_state.username:
-    tab1, tab2, tab3 = st.tabs(["📰 News Feed", "✍️ Create Post", "💬 Messages"])
+if "username" in st.session_state:
+    tab1, tab2, tab3, tab4 = st.tabs(["📰 News Feed", "✍️ Create Post", "💬 Messages", "👤 Profile"])
 
     # News Feed
     with tab1:
@@ -216,3 +234,42 @@ if st.session_state.username:
                 if new_msg.strip():
                     send_message(st.session_state.username, other_user, new_msg)
                     st.rerun()
+
+    # Profile
+    with tab4:
+        st.subheader("👤 Profile")
+        u, pic = get_user(st.session_state.username)
+        if pic:
+            st.image(pic, width=120)
+        st.markdown(f"**Username:** {u}")
+        st.markdown(f"**Followers:** {count_followers(u)} | **Following:** {count_following(u)}")
+
+        # Follow other users
+        other_user = st.text_input("Enter username to view profile")
+        if other_user:
+            ou, opic = get_user(other_user) if get_user(other_user) else (None, None)
+            if ou:
+                st.markdown(f"### {ou}'s Profile")
+                if opic:
+                    st.image(opic, width=100)
+                st.write(f"Followers: {count_followers(ou)} | Following: {count_following(ou)}")
+
+                if is_following(st.session_state.username, ou):
+                    if st.button("Unfollow"):
+                        unfollow_user(st.session_state.username, ou)
+                        st.rerun()
+                else:
+                    if st.button("Follow"):
+                        follow_user(st.session_state.username, ou)
+                        st.rerun()
+
+                st.write("📸 Their Posts:")
+                their_posts = get_posts(ou)
+                for pid, usr, msg, img, ts in their_posts:
+                    st.markdown(f"**{usr}** · {ts}")
+                    if msg:
+                        st.write(msg)
+                    if img:
+                        st.image(img, use_container_width=True)
+            else:
+                st.error("User not found.")
