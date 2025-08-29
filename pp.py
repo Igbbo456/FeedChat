@@ -8,17 +8,18 @@ from PIL import Image
 # Optional: streamlit-webrtc for video calls
 try:
     from streamlit_webrtc import webrtc_streamer, RTCConfiguration
-    WEbrtc_AVAILABLE = True
+    WEBRTC_AVAILABLE = True
     RTC_CONFIGURATION = RTCConfiguration(
         {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
     )
 except Exception:
-    WEbrtc_AVAILABLE = False
+    WEBRTC_AVAILABLE = False
+
+DB_PATH = "feedchat.db"
 
 # -------------------------
-# DB Setup & Migration
+# DB connection & init
 # -------------------------
-DB_PATH = "feedchat.db"
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 c = conn.cursor()
 
@@ -31,7 +32,7 @@ def init_db():
             profile_pic BLOB
         )
     """)
-    # Posts (media supports image or video stored as BLOB)
+    # Posts (support media BLOB + media_type)
     c.execute("""
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,10 +91,11 @@ def init_db():
     """)
     conn.commit()
 
+# Ensure tables exist before anything else
 init_db()
 
 # -------------------------
-# Helpers (DB operations)
+# Helper functions (DB ops)
 # -------------------------
 def safe_rerun():
     try:
@@ -104,7 +106,7 @@ def safe_rerun():
         except Exception:
             pass
 
-# --- Users
+# Users
 def add_user(username, password, profile_pic):
     if not username:
         return
@@ -114,7 +116,7 @@ def add_user(username, password, profile_pic):
                   (username, password, profile_pic))
         conn.commit()
     except sqlite3.IntegrityError:
-        # Replace existing (update) - keep semantics simple
+        # update existing user (allow replacing profile pic / password)
         c.execute("UPDATE users SET password=?, profile_pic=? WHERE username=?",
                   (password, profile_pic, username))
         conn.commit()
@@ -127,14 +129,9 @@ def get_user(username):
     if not username:
         return None
     c.execute("SELECT username, profile_pic FROM users WHERE username=?", (username,))
-    row = c.fetchone()
-    return row  # (username, profile_pic) or None
+    return c.fetchone()  # or None
 
-def get_user_profile_pic(username):
-    row = get_user(username)
-    return row[1] if row and row[1] else None
-
-# --- Posts
+# Posts
 def add_post(username, message, media=None, media_type=None):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO posts (username, message, media, media_type, timestamp) VALUES (?, ?, ?, ?, ?)",
@@ -150,7 +147,7 @@ def get_posts():
     c.execute("SELECT id, username, message, media, media_type, timestamp FROM posts ORDER BY id DESC")
     return c.fetchall()
 
-# --- Likes
+# Likes
 def add_like(post_id, username):
     c.execute("SELECT 1 FROM likes WHERE post_id=? AND username=?", (post_id, username))
     if not c.fetchone():
@@ -179,7 +176,7 @@ def count_total_likes_for_user(username):
     r = c.fetchone()
     return r[0] if r else 0
 
-# --- Comments
+# Comments
 def add_comment(post_id, username, comment):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO comments (post_id, username, comment, timestamp) VALUES (?, ?, ?, ?)",
@@ -190,7 +187,7 @@ def get_comments(post_id):
     c.execute("SELECT username, comment, timestamp FROM comments WHERE post_id=? ORDER BY id ASC", (post_id,))
     return c.fetchall()
 
-# --- Follows
+# Follows
 def follow_user(follower, following):
     if follower == following:
         return
@@ -215,13 +212,7 @@ def get_following(username):
     c.execute("SELECT following FROM follows WHERE follower=?", (username,))
     return [r[0] for r in c.fetchall()]
 
-def count_followers(username):
-    return len(get_followers(username))
-
-def count_following(username):
-    return len(get_following(username))
-
-# --- Messages
+# Messages
 def send_message(sender, receiver, message):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO messages (sender, receiver, message, timestamp) VALUES (?, ?, ?, ?)",
@@ -235,7 +226,7 @@ def get_messages(user1, user2):
                  ORDER BY id ASC""", (user1, user2, user2, user1))
     return c.fetchall()
 
-# --- Notifications
+# Notifications
 def add_notification(username, message):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute("INSERT INTO notifications (username, message, timestamp, seen) VALUES (?, ?, ?, 0)",
@@ -256,7 +247,7 @@ def count_unseen(username):
     return r[0] if r else 0
 
 # -------------------------
-# UI (Streamlit)
+# Streamlit UI
 # -------------------------
 st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide")
 st.title("💬 FeedChat")
@@ -267,10 +258,10 @@ if "username" not in st.session_state:
 if "view_profile" not in st.session_state:
     st.session_state.view_profile = None
 
-# --- Authentication area in sidebar ---
+# Authentication area in sidebar
 st.sidebar.header("Account")
-
 auth_choice = st.sidebar.selectbox("I want to:", ["Login", "Register", "Logout"] if st.session_state.username else ["Login", "Register"])
+
 if auth_choice == "Register":
     st.sidebar.subheader("Create account")
     reg_user = st.sidebar.text_input("Username", key="reg_user")
@@ -299,39 +290,36 @@ elif auth_choice == "Logout":
         st.session_state.view_profile = None
         safe_rerun()
 
-# If not logged in, stop UI (so they must login/register)
+# Require login to proceed
 if not st.session_state.username:
     st.info("Please register or login in the sidebar to use FeedChat.")
     st.stop()
 
-# Top bar: show logged in user and unseen notifications count
-col1, col2 = st.columns([8,1])
-with col1:
+# Top bar: username + unseen notifs
+col_l, col_r = st.columns([8,1])
+with col_l:
     st.write(f"Logged in as **{st.session_state.username}**")
-with col2:
+with col_r:
     unseen = count_unseen(st.session_state.username)
     if unseen:
-        st.button(f"🔔 {unseen}", key="notifs_btn")
+        st.button(f"🔔 {unseen}", key="notif_btn")
     else:
-        st.button("🔔 0", key="notifs_btn_zero")
+        st.button("🔔 0", key="notif_btn_zero")
 
-# Play a small sound if there are unseen notifications (browser may autoplay block)
+# Play a sound once if there are unseen notifications
 notes = get_notifications(st.session_state.username)
 if any(n[3] == 0 for n in notes):
-    st.markdown(
-        """
+    st.markdown("""
         <audio autoplay>
           <source src="https://www.soundjay.com/buttons/sounds/button-3.mp3" type="audio/mp3">
         </audio>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
 # Tabs
 tabs = st.tabs(["Home", "Create Post", "Messages", "Notifications", "Profile", "Video Call"])
 home_tab, create_tab, messages_tab, notifications_tab, profile_tab, videocall_tab = tabs
 
-# --- Home (Feed)
+# --- Home / Feed ---
 with home_tab:
     st.header("📰 Home / Feed")
     posts = get_posts()
@@ -341,18 +329,17 @@ with home_tab:
         for pid, user, msg, media, mtype, ts in posts:
             card = st.container()
             with card:
-                c1, c2 = st.columns([1, 9])
-                with c1:
-                    user_row = get_user(user)
-                    if user_row and user_row[1]:
+                left, right = st.columns([1,9])
+                with left:
+                    u = get_user(user)
+                    if u and u[1]:
                         try:
-                            img = Image.open(io.BytesIO(user_row[1]))
-                            st.image(img, width=60)
+                            st.image(Image.open(io.BytesIO(u[1])), width=60)
                         except Exception:
                             st.write("👤")
                     else:
                         st.write("👤")
-                with c2:
+                with right:
                     st.markdown(f"**{user}**  ·  _{ts}_")
                     if msg:
                         st.write(msg)
@@ -383,7 +370,7 @@ with home_tab:
                     st.markdown("**Comments**")
                     for cu, cm, ct in get_comments(pid):
                         cu_row = get_user(cu)
-                        cols = st.columns([1, 9])
+                        cols = st.columns([1,9])
                         if cu_row and cu_row[1]:
                             try:
                                 cols[0].image(Image.open(io.BytesIO(cu_row[1])), width=30)
@@ -400,7 +387,7 @@ with home_tab:
                             safe_rerun()
             st.markdown("---")
 
-# --- Create Post
+# --- Create Post ---
 with create_tab:
     st.header("✍️ Create a Post")
     post_text = st.text_area("What's on your mind?", key="create_text")
@@ -409,7 +396,7 @@ with create_tab:
     media_type = None
     if media_file:
         try:
-            if media_file.type.startswith("image") or media_file.name.lower().endswith((".png", ".jpg", ".jpeg")):
+            if (hasattr(media_file, "type") and media_file.type.startswith("image")) or media_file.name.lower().endswith((".png", ".jpg", ".jpeg")):
                 img = Image.open(media_file)
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
@@ -428,10 +415,10 @@ with create_tab:
             st.success("Posted!")
             safe_rerun()
 
-# --- Messages
+# --- Messages ---
 with messages_tab:
     st.header("💬 Messages")
-    other = st.text_input("Open chat with (username)", key="msg_other")
+    other = st.text_input("Open chat with (username)", key="messages_other")
     if other:
         conv = get_messages(st.session_state.username, other)
         if not conv:
@@ -439,14 +426,14 @@ with messages_tab:
         else:
             for s, m, ts in conv:
                 st.markdown(f"**{s}** ({ts}): {m}")
-    new_msg = st.text_area("Type message", key="msg_text")
+    new_msg = st.text_area("Type message", key="messages_text")
     if st.button("Send message", key="send_msg_btn"):
         if other and new_msg and new_msg.strip():
             send_message(st.session_state.username, other, new_msg.strip())
             st.success("Message sent.")
             safe_rerun()
 
-# --- Notifications
+# --- Notifications ---
 with notifications_tab:
     st.header("🔔 Notifications")
     notes = get_notifications(st.session_state.username)
@@ -459,7 +446,7 @@ with notifications_tab:
         mark_notifications_seen(st.session_state.username)
         safe_rerun()
 
-# --- Profile
+# --- Profile ---
 with profile_tab:
     st.header("👤 Profile")
     target = st.session_state.view_profile or st.session_state.username
@@ -535,14 +522,13 @@ with profile_tab:
         else:
             st.error("User not found.")
 
-# --- Video Call Tab
+# --- Video Call ---
 with videocall_tab:
     st.header("📹 Video Call")
     st.write("Start a small peer-to-peer video call (uses your camera & mic).")
-    if not WEbrtc_AVAILABLE:
+    if not WEBRTC_AVAILABLE:
         st.warning("Video call requires the `streamlit-webrtc` package. Install with: pip install streamlit-webrtc")
     else:
-        # A simple webrtc streamer that shows local camera + audio
         try:
             webrtc_streamer(
                 key="feedchat-video-call",
@@ -551,5 +537,3 @@ with videocall_tab:
             )
         except Exception as e:
             st.error(f"Could not start video call: {e}")
-
-# End of file
