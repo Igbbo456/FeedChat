@@ -1,309 +1,104 @@
 import streamlit as st
-import sqlite3, io
-from PIL import Image
-from datetime import datetime
+import sqlite3
 
-# ----------------------
+# ======================
 # Database Setup
-# ----------------------
+# ======================
 conn = sqlite3.connect("feedchat.db", check_same_thread=False)
 c = conn.cursor()
 
+# Create USERS table (username + password + profile_pic)
 c.execute('''CREATE TABLE IF NOT EXISTS users
-             (username TEXT PRIMARY KEY, profile_pic BLOB)''')
+             (username TEXT PRIMARY KEY,
+              password TEXT,
+              profile_pic BLOB)''')
 
+# Create POSTS table
 c.execute('''CREATE TABLE IF NOT EXISTS posts
              (id INTEGER PRIMARY KEY AUTOINCREMENT,
               username TEXT,
-              message TEXT,
-              image BLOB,
-              timestamp TEXT)''')
+              content TEXT,
+              timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
-c.execute('''CREATE TABLE IF NOT EXISTS likes
-             (post_id INTEGER, username TEXT)''')
-
+# Create COMMENTS table
 c.execute('''CREATE TABLE IF NOT EXISTS comments
-             (post_id INTEGER, username TEXT, comment TEXT, timestamp TEXT)''')
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+              post_id INTEGER,
+              username TEXT,
+              comment TEXT,
+              timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
-c.execute('''CREATE TABLE IF NOT EXISTS messages
-             (sender TEXT, receiver TEXT, message TEXT, timestamp TEXT)''')
+# Create LIKES table
+c.execute('''CREATE TABLE IF NOT EXISTS likes
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+              post_id INTEGER,
+              username TEXT)''')
 
-c.execute('''CREATE TABLE IF NOT EXISTS followers
-             (follower TEXT, following TEXT)''')
+# Create NOTIFICATIONS table
+c.execute('''CREATE TABLE IF NOT EXISTS notifications
+             (id INTEGER PRIMARY KEY AUTOINCREMENT,
+              username TEXT,
+              message TEXT,
+              seen INTEGER DEFAULT 0,
+              timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
 
 conn.commit()
 
-# ----------------------
-# Helper Functions
-# ----------------------
-def save_user(username, profile_pic):
-    c.execute("INSERT OR REPLACE INTO users VALUES (?, ?)", (username, profile_pic))
+# ======================
+# User Management
+# ======================
+def add_user(username, password, profile_pic):
+    c.execute("INSERT OR REPLACE INTO users (username, password, profile_pic) VALUES (?, ?, ?)",
+              (username, password, profile_pic))
     conn.commit()
 
-def get_user(username):
-    c.execute("SELECT username, profile_pic FROM users WHERE username=?", (username,))
-    return c.fetchone()
-
-def add_post(username, message, image):
-    c.execute("INSERT INTO posts (username, message, image, timestamp) VALUES (?,?,?,?)",
-              (username, message, image, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-
-def get_posts(user=None):
-    if user:
-        c.execute("SELECT * FROM posts WHERE username=? ORDER BY id DESC", (user,))
-    else:
-        c.execute("SELECT * FROM posts ORDER BY id DESC")
-    return c.fetchall()
-
-def like_post(post_id, username):
-    c.execute("INSERT INTO likes VALUES (?, ?)", (post_id, username))
-    conn.commit()
-
-def unlike_post(post_id, username):
-    c.execute("DELETE FROM likes WHERE post_id=? AND username=?", (post_id, username))
-    conn.commit()
-
-def has_liked(post_id, username):
-    c.execute("SELECT * FROM likes WHERE post_id=? AND username=?", (post_id, username))
+def verify_user(username, password):
+    c.execute("SELECT 1 FROM users WHERE username=? AND password=?", (username, password))
     return c.fetchone() is not None
 
-def count_likes(post_id):
-    c.execute("SELECT COUNT(*) FROM likes WHERE post_id=?", (post_id,))
-    return c.fetchone()[0]
+def get_user_profile_pic(username):
+    c.execute("SELECT profile_pic FROM users WHERE username=?", (username,))
+    result = c.fetchone()
+    return result[0] if result else None
 
-def count_total_likes(user):
-    c.execute("""SELECT COUNT(*) 
-                 FROM likes 
-                 WHERE post_id IN (SELECT id FROM posts WHERE username=?)""", (user,))
-    return c.fetchone()[0]
-
-def add_comment(post_id, username, comment):
-    c.execute("INSERT INTO comments VALUES (?,?,?,?)",
-              (post_id, username, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-
-def get_comments(post_id):
-    c.execute("SELECT username, comment, timestamp FROM comments WHERE post_id=?", (post_id,))
-    return c.fetchall()
-
-def send_message(sender, receiver, message):
-    c.execute("INSERT INTO messages VALUES (?,?,?,?)",
-              (sender, receiver, message, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-
-def get_messages(user1, user2):
-    c.execute("""SELECT sender, message, timestamp FROM messages
-                 WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
-                 ORDER BY timestamp ASC""", (user1, user2, user2, user1))
-    return c.fetchall()
-
-# ----- Follow System -----
-def follow_user(follower, following):
-    c.execute("INSERT INTO followers VALUES (?, ?)", (follower, following))
-    conn.commit()
-
-def unfollow_user(follower, following):
-    c.execute("DELETE FROM followers WHERE follower=? AND following=?", (follower, following))
-    conn.commit()
-
-def is_following(follower, following):
-    c.execute("SELECT * FROM followers WHERE follower=? AND following=?", (follower, following))
-    return c.fetchone() is not None
-
-def count_followers(user):
-    c.execute("SELECT COUNT(*) FROM followers WHERE following=?", (user,))
-    return c.fetchone()[0]
-
-def count_following(user):
-    c.execute("SELECT COUNT(*) FROM followers WHERE follower=?", (user,))
-    return c.fetchone()[0]
-
-# ----------------------
-# Streamlit App
-# ----------------------
+# ======================
+# Streamlit UI
+# ======================
 st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide")
+
 st.title("💬 FeedChat")
 
-# Sidebar - Login / Register
-st.sidebar.header("👤 User Login / Register")
-username = st.sidebar.text_input("Enter your username")
-profile_pic_file = st.sidebar.file_uploader("Upload profile picture", type=["png","jpg","jpeg"])
+# -------------------
+# Sidebar - Sign Up
+# -------------------
+st.sidebar.subheader("Sign Up")
+new_user = st.sidebar.text_input("Choose a username")
+new_pass = st.sidebar.text_input("Choose a password", type="password")
+new_pic = st.sidebar.file_uploader("Upload profile picture", type=["jpg", "png", "jpeg"])
 
-if st.sidebar.button("Save Profile"):
-    if username.strip():
-        pic_bytes = None
-        if profile_pic_file:
-            img = Image.open(profile_pic_file)
-            img_bytes = io.BytesIO()
-            img.save(img_bytes, format="PNG")
-            pic_bytes = img_bytes.getvalue()
-        save_user(username, pic_bytes)
-        st.sidebar.success("✅ Profile saved!")
+if st.sidebar.button("Create Account"):
+    if new_user and new_pass:
+        pic_bytes = new_pic.read() if new_pic else None
+        add_user(new_user.strip(), new_pass, pic_bytes)
+        st.sidebar.success("✅ Account created! Please log in.")
 
-if username:
-    st.session_state.username = username
-else:
-    st.warning("Please enter your username in the sidebar to continue.")
+# -------------------
+# Sidebar - Login
+# -------------------
+st.sidebar.subheader("Login")
+user = st.sidebar.text_input("Username")
+pw = st.sidebar.text_input("Password", type="password")
 
-# ----------------------
-# Main Tabs
-# ----------------------
+if st.sidebar.button("Login"):
+    if verify_user(user, pw):
+        st.session_state.username = user
+        st.sidebar.success(f"Welcome {user} 🎉")
+    else:
+        st.sidebar.error("❌ Invalid username or password")
+
+# Show profile pic if logged in
 if "username" in st.session_state:
-    tab1, tab2, tab3, tab4 = st.tabs(["📰 News Feed", "✍️ Create Post", "💬 Messages", "👤 Profile"])
-
-    # --- News Feed ---
-    with tab1:
-        posts = get_posts()
-        if not posts:
-            st.info("No posts yet. Be the first to post something!")
-        else:
-            for post in posts:
-                post_id, user, message, image, timestamp = post
-                user_data = get_user(user)
-                if user_data:
-                    u, pic = user_data
-                else:
-                    u, pic = user, None
-
-                col1, col2 = st.columns([1, 8])
-                with col1:
-                    if pic:
-                        st.image(Image.open(io.BytesIO(pic)), width=50)
-                with col2:
-                    st.markdown(f"**{u}** · ⏱ {timestamp}")
-                    if message:
-                        st.write(message)
-                    if image:
-                        st.image(Image.open(io.BytesIO(image)), use_container_width=True)
-
-                # Likes
-                col1, col2 = st.columns([1, 5])
-                with col1:
-                    if has_liked(post_id, st.session_state.username):
-                        if st.button("Unlike", key=f"unlike_{post_id}"):
-                            unlike_post(post_id, st.session_state.username)
-                            st.rerun()
-                    else:
-                        if st.button("Like", key=f"like_{post_id}"):
-                            like_post(post_id, st.session_state.username)
-                            st.rerun()
-                with col2:
-                    st.write(f"👍 {count_likes(post_id)} likes")
-
-                # Comments
-                st.markdown("💬 Comments:")
-                comments = get_comments(post_id)
-                for cu, cm, ct in comments:
-                    cu_data = get_user(cu)
-                    if cu_data:
-                        cu_name, cu_pic = cu_data
-                    else:
-                        cu_name, cu_pic = cu, None
-
-                    colc1, colc2 = st.columns([1, 8])
-                    with colc1:
-                        if cu_pic:
-                            st.image(Image.open(io.BytesIO(cu_pic)), width=35)
-                    with colc2:
-                        st.markdown(f"**{cu_name}**: {cm} ⏱ {ct}")
-
-                comment_input = st.text_input(f"Add comment to post {post_id}", key=f"comment_input_{post_id}")
-                if st.button("Comment", key=f"comment_btn_{post_id}"):
-                    if comment_input.strip():
-                        add_comment(post_id, st.session_state.username, comment_input)
-                        st.rerun()
-                st.markdown("---")
-
-    # --- Create Post ---
-    with tab2:
-        st.subheader("✍️ Create a Post")
-        msg = st.text_area("What's on your mind?")
-        uploaded_img = st.file_uploader("Upload a photo", type=["png","jpg","jpeg"])
-        if st.button("Post Now"):
-            if msg.strip() or uploaded_img:
-                img_bytes = None
-                if uploaded_img:
-                    img = Image.open(uploaded_img)
-                    img_bytes = io.BytesIO()
-                    img.save(img_bytes, format="PNG")
-                    img_bytes = img_bytes.getvalue()
-                add_post(st.session_state.username, msg, img_bytes)
-                st.success("✅ Post created!")
-                st.rerun()
-            else:
-                st.warning("Please write something or upload an image.")
-
-    # --- Messages ---
-    with tab3:
-        st.subheader("💬 Private Messages")
-        other_user = st.text_input("Enter the username you want to chat with")
-        if other_user:
-            chat = get_messages(st.session_state.username, other_user)
-            st.write(f"📨 Chat between **{st.session_state.username}** and **{other_user}**:")
-            for sender, msg, ts in chat:
-                st.markdown(f"**{sender}** ({ts}): {msg}")
-
-            new_msg = st.text_input("Type your message")
-            if st.button("Send"):
-                if new_msg.strip():
-                    send_message(st.session_state.username, other_user, new_msg)
-                    st.rerun()
-
-    # --- Profile ---
-    with tab4:
-        st.subheader("👤 Profile")
-        u, pic = get_user(st.session_state.username)
-        if pic:
-            st.image(Image.open(io.BytesIO(pic)), width=120)
-        st.markdown(f"**Username:** {u}")
-
-        # Show followers/following/likes table
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Followers", count_followers(u))
-        with col2:
-            st.metric("Following", count_following(u))
-        with col3:
-            st.metric("Total Likes", count_total_likes(u))
-
-        # View other user’s profile
-        other_user = st.text_input("Enter username to view profile")
-        if other_user:
-            ou_data = get_user(other_user)
-            if ou_data:
-                ou, opic = ou_data
-                st.markdown(f"### {ou}'s Profile")
-                if opic:
-                    st.image(Image.open(io.BytesIO(opic)), width=100)
-
-                # Show their stats
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Followers", count_followers(ou))
-                with col2:
-                    st.metric("Following", count_following(ou))
-                with col3:
-                    st.metric("Total Likes", count_total_likes(ou))
-
-                # Follow / Unfollow
-                if is_following(st.session_state.username, ou):
-                    if st.button("Unfollow"):
-                        unfollow_user(st.session_state.username, ou)
-                        st.rerun()
-                else:
-                    if st.button("Follow"):
-                        follow_user(st.session_state.username, ou)
-                        st.rerun()
-
-                # Show posts from this user
-                st.write("📸 Their Posts:")
-                their_posts = get_posts(ou)
-                for pid, usr, msg, img, ts in their_posts:
-                    st.markdown(f"**{usr}** · {ts}")
-                    if msg:
-                        st.write(msg)
-                    if img:
-                        st.image(Image.open(io.BytesIO(img)), use_container_width=True)
-            else:
-                st.error("User not found.")
+    st.success(f"Logged in as {st.session_state.username}")
+    pic = get_user_profile_pic(st.session_state.username)
+    if pic:
+        st.image(pic, width=100, caption="Profile Picture")
