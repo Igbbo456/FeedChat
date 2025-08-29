@@ -114,8 +114,8 @@ conn = init_db()
 # Helper Functions
 # ===================================
 def create_user(username, password, email, profile_pic=None, bio=""):
-    c = conn.cursor()
     try:
+        c = conn.cursor()
         # Check if the user already exists
         c.execute("SELECT id FROM users WHERE username=?", (username,))
         if c.fetchone():
@@ -128,220 +128,394 @@ def create_user(username, password, email, profile_pic=None, bio=""):
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
         return False
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def verify_user(username, password):
-    c = conn.cursor()
-    c.execute("SELECT id, username FROM users WHERE username=? AND password=?", (username, password))
-    return c.fetchone()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id, username FROM users WHERE username=? AND password=?", (username, password))
+        return c.fetchone()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return None
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_user(user_id):
-    c = conn.cursor()
-    c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE id=?", (user_id,))
-    return c.fetchone()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE id=?", (user_id,))
+        return c.fetchone()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return None
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_user_by_username(username):
-    c = conn.cursor()
-    c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE username=?", (username,))
-    return c.fetchone()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE username=?", (username,))
+        return c.fetchone()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return None
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def create_post(user_id, content, media_type=None, media_data=None):
-    c = conn.cursor()
-    c.execute("INSERT INTO posts (user_id, content, media_type, media_data) VALUES (?, ?, ?, ?)",
-             (user_id, content, media_type, media_data))
-    conn.commit()
-    return c.lastrowid
+    try:
+        c = conn.cursor()
+        c.execute("INSERT INTO posts (user_id, content, media_type, media_data) VALUES (?, ?, ?, ?)",
+                 (user_id, content, media_type, media_data))
+        conn.commit()
+        return c.lastrowid
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return None
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_posts(user_id=None):
-    c = conn.cursor()
-    if user_id:
-        c.execute("""
-            SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
-                   COUNT(DISTINCT l.id) as like_count,
-                   EXISTS(SELECT 1 FROM likes WHERE post_id=p.id AND user_id=?) as user_liked
-            FROM posts p
-            JOIN users u ON p.user_id = u.id
-            LEFT JOIN likes l ON p.id = l.post_id
-            WHERE p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?) OR p.user_id=?
-            GROUP BY p.id
-            ORDER BY p.created_at DESC
-        """, (user_id, user_id, user_id))
-    else:
-        c.execute("""
-            SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
-                   COUNT(DISTINCT l.id) as like_count,
-                   0 as user_liked
-            FROM posts p
-            JOIN users u ON p.user_id = u.id
-            LEFT JOIN likes l ON p.id = l.post_id
-            GROUP BY p.id
-            ORDER BY p.created_at DESC
-        """)
-    return c.fetchall()
+    try:
+        c = conn.cursor()
+        if user_id:
+            c.execute("""
+                SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
+                       COUNT(DISTINCT l.id) as like_count,
+                       EXISTS(SELECT 1 FROM likes WHERE post_id=p.id AND user_id=?) as user_liked
+                FROM posts p
+                JOIN users u ON p.user_id = u.id
+                LEFT JOIN likes l ON p.id = l.post_id
+                WHERE p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?) OR p.user_id=?
+                GROUP BY p.id
+                ORDER BY p.created_at DESC
+            """, (user_id, user_id, user_id))
+        else:
+            c.execute("""
+                SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
+                       COUNT(DISTINCT l.id) as like_count,
+                       0 as user_liked
+                FROM posts p
+                JOIN users u ON p.user_id = u.id
+                LEFT JOIN likes l ON p.id = l.post_id
+                GROUP BY p.id
+                ORDER BY p.created_at DESC
+            """)
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def like_post(user_id, post_id):
-    c = conn.cursor()
-    # Check if already liked
-    c.execute("SELECT id FROM likes WHERE user_id=? AND post_id=?", (user_id, post_id))
-    if not c.fetchone():
-        c.execute("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", (user_id, post_id))
-        conn.commit()
-        
-        # Get post owner
-        c.execute("SELECT user_id FROM posts WHERE id=?", (post_id,))
-        post_owner_result = c.fetchone()
-        if post_owner_result:
-            post_owner = post_owner_result[0]
+    try:
+        c = conn.cursor()
+        # Check if already liked
+        c.execute("SELECT id FROM likes WHERE user_id=? AND post_id=?", (user_id, post_id))
+        if not c.fetchone():
+            c.execute("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", (user_id, post_id))
+            conn.commit()
             
-            # Create notification for like
-            user = get_user(user_id)
-            if user:
-                c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-                         (post_owner, f"{user[1]} liked your post"))
-                conn.commit()
-        return True
-    return False
+            # Get post owner
+            c.execute("SELECT user_id FROM posts WHERE id=?", (post_id,))
+            post_owner_result = c.fetchone()
+            if post_owner_result:
+                post_owner = post_owner_result[0]
+                
+                # Create notification for like
+                user = get_user(user_id)
+                if user:
+                    c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                             (post_owner, f"{user[1]} liked your post"))
+                    conn.commit()
+            return True
+        return False
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return False
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def follow_user(follower_id, following_id):
-    c = conn.cursor()
-    # Check if already following
-    c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
-    if not c.fetchone():
-        c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
-        conn.commit()
-        
-        # Create notification for follow
-        follower = get_user(follower_id)
-        if follower:
-            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-                     (following_id, f"{follower[1]} started following you"))
+    try:
+        c = conn.cursor()
+        # Check if already following
+        c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
+        if not c.fetchone():
+            c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
             conn.commit()
-        return True
-    return False
+            
+            # Create notification for follow
+            follower = get_user(follower_id)
+            if follower:
+                c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                         (following_id, f"{follower[1]} started following you"))
+                conn.commit()
+            return True
+        return False
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return False
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def unfollow_user(follower_id, following_id):
-    c = conn.cursor()
-    c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
-    conn.commit()
-    return c.rowcount > 0
+    try:
+        c = conn.cursor()
+        c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
+        conn.commit()
+        return c.rowcount > 0
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return False
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def is_following(follower_id, following_id):
-    c = conn.cursor()
-    c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
-    return c.fetchone() is not None
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
+        return c.fetchone() is not None
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return False
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def send_message(sender_id, receiver_id, content):
-    c = conn.cursor()
-    c.execute("INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
-             (sender_id, receiver_id, content))
-    conn.commit()
-    
-    # Create notification for message
-    sender = get_user(sender_id)
-    if sender:
-        c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-                 (receiver_id, f"New message from {sender[1]}"))
+    try:
+        c = conn.cursor()
+        c.execute("INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
+                 (sender_id, receiver_id, content))
         conn.commit()
-    return True
+        
+        # Create notification for message
+        sender = get_user(sender_id)
+        if sender:
+            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                     (receiver_id, f"New message from {sender[1]}"))
+            conn.commit()
+        return True
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return False
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_messages(user1_id, user2_id):
-    c = conn.cursor()
-    c.execute("""
-        SELECT m.id, m.sender_id, u1.username as sender, m.receiver_id, u2.username as receiver, 
-               m.content, m.is_read, m.created_at
-        FROM messages m
-        JOIN users u1 ON m.sender_id = u1.id
-        JOIN users u2 ON m.receiver_id = u2.id
-        WHERE (m.sender_id=? AND m.receiver_id=?) OR (m.sender_id=? AND m.receiver_id=?)
-        ORDER BY m.created_at ASC
-    """, (user1_id, user2_id, user2_id, user1_id))
-    return c.fetchall()
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT m.id, m.sender_id, u1.username as sender, m.receiver_id, u2.username as receiver, 
+                   m.content, m.is_read, m.created_at
+            FROM messages m
+            JOIN users u1 ON m.sender_id = u1.id
+            JOIN users u2 ON m.receiver_id = u2.id
+            WHERE (m.sender_id=? AND m.receiver_id=?) OR (m.sender_id=? AND m.receiver_id=?)
+            ORDER BY m.created_at ASC
+        """, (user1_id, user2_id, user2_id, user1_id))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_conversations(user_id):
-    c = conn.cursor()
-    c.execute("""
-        SELECT DISTINCT 
-            CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END as other_user_id,
-            u.username,
-            (SELECT content FROM messages 
-             WHERE (sender_id = ? AND receiver_id = other_user_id) 
-                OR (sender_id = other_user_id AND receiver_id = ?)
-             ORDER BY created_at DESC LIMIT 1) as last_message,
-            (SELECT created_at FROM messages 
-             WHERE (sender_id = ? AND receiver_id = other_user_id) 
-                OR (sender_id = other_user_id AND receiver_id = ?)
-             ORDER BY created_at DESC LIMIT 1) as last_message_time,
-            SUM(CASE WHEN m.receiver_id = ? AND m.is_read = 0 THEN 1 ELSE 0 END) as unread_count
-        FROM messages m
-        JOIN users u ON u.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
-        WHERE m.sender_id = ? OR m.receiver_id = ?
-        GROUP BY other_user_id
-        ORDER BY last_message_time DESC
-    """, (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id))
-    return c.fetchall()
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT DISTINCT 
+                CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END as other_user_id,
+                u.username,
+                (SELECT content FROM messages 
+                 WHERE (sender_id = ? AND receiver_id = other_user_id) 
+                    OR (sender_id = other_user_id AND receiver_id = ?)
+                 ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT created_at FROM messages 
+                 WHERE (sender_id = ? AND receiver_id = other_user_id) 
+                    OR (sender_id = other_user_id AND receiver_id = ?)
+                 ORDER BY created_at DESC LIMIT 1) as last_message_time,
+                SUM(CASE WHEN m.receiver_id = ? AND m.is_read = 0 THEN 1 ELSE 0 END) as unread_count
+            FROM messages m
+            JOIN users u ON u.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
+            WHERE m.sender_id = ? OR m.receiver_id = ?
+            GROUP BY other_user_id
+            ORDER BY last_message_time DESC
+        """, (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def mark_messages_as_read(sender_id, receiver_id):
-    c = conn.cursor()
-    c.execute("UPDATE messages SET is_read=1 WHERE sender_id=? AND receiver_id=?", (sender_id, receiver_id))
-    conn.commit()
+    try:
+        c = conn.cursor()
+        c.execute("UPDATE messages SET is_read=1 WHERE sender_id=? AND receiver_id=?", (sender_id, receiver_id))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_notifications(user_id):
-    c = conn.cursor()
-    c.execute("SELECT id, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
-    return c.fetchall()
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def mark_notification_as_read(notification_id):
-    c = conn.cursor()
-    c.execute("UPDATE notifications SET is_read=1 WHERE id=?", (notification_id,))
-    conn.commit()
+    try:
+        c = conn.cursor()
+        c.execute("UPDATE notifications SET is_read=1 WHERE id=?", (notification_id,))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_followers(user_id):
-    c = conn.cursor()
-    c.execute("""
-        SELECT u.id, u.username 
-        FROM follows f 
-        JOIN users u ON f.follower_id = u.id 
-        WHERE f.following_id=?
-    """, (user_id,))
-    return c.fetchall()
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT u.id, u.username 
+            FROM follows f 
+            JOIN users u ON f.follower_id = u.id 
+            WHERE f.following_id=?
+        """, (user_id,))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_following(user_id):
-    c = conn.cursor()
-    c.execute("""
-        SELECT u.id, u.username 
-        FROM follows f 
-        JOIN users u ON f.following_id = u.id 
-        WHERE f.follower_id=?
-    """, (user_id,))
-    return c.fetchall()
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT u.id, u.username 
+            FROM follows f 
+            JOIN users u ON f.following_id = u.id 
+            WHERE f.follower_id=?
+        """, (user_id,))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def get_suggested_users(user_id):
-    c = conn.cursor()
-    c.execute("""
-        SELECT id, username 
-        FROM users 
-        WHERE id != ? AND id NOT IN (
-            SELECT following_id FROM follows WHERE follower_id=?
-        )
-        ORDER BY RANDOM() 
-        LIMIT 5
-    """, (user_id, user_id))
-    return c.fetchall()
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT id, username 
+            FROM users 
+            WHERE id != ? AND id NOT IN (
+                SELECT following_id FROM follows WHERE follower_id=?
+            )
+            ORDER BY RANDOM() 
+            LIMIT 5
+        """, (user_id, user_id))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 def start_call(caller_id, receiver_id):
-    c = conn.cursor()
-    call_id = random.randint(100000, 999999)  # Simulate call ID
-    # In a real app, you would integrate with a WebRTC service here
-    c.execute("INSERT INTO calls (caller_id, receiver_id, status, started_at) VALUES (?, ?, ?, ?)",
-             (caller_id, receiver_id, "initiated", datetime.datetime.now()))
-    conn.commit()
-    
-    # Create notification for call
-    caller = get_user(caller_id)
-    if caller:
-        c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-                 (receiver_id, f"📞 Incoming call from {caller[1]}"))
+    try:
+        c = conn.cursor()
+        call_id = random.randint(100000, 999999)  # Simulate call ID
+        # In a real app, you would integrate with a WebRTC service here
+        c.execute("INSERT INTO calls (caller_id, receiver_id, status, started_at) VALUES (?, ?, ?, ?)",
+                 (caller_id, receiver_id, "initiated", datetime.datetime.now()))
         conn.commit()
-    return call_id
+        
+        # Create notification for call
+        caller = get_user(caller_id)
+        if caller:
+            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                     (receiver_id, f"📞 Incoming call from {caller[1]}"))
+            conn.commit()
+        return call_id
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return None
+    finally:
+        try:
+            c.close()
+        except:
+            pass
 
 # ===================================
 # Streamlit UI
@@ -442,12 +616,15 @@ if not st.session_state.user:
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
             if st.form_submit_button("Login"):
-                user = verify_user(username, password)
-                if user:
-                    st.session_state.user = user
-                    st.rerun()
+                if username and password:
+                    user = verify_user(username, password)
+                    if user:
+                        st.session_state.user = user
+                        st.rerun()
+                    else:
+                        st.error("Invalid username or password")
                 else:
-                    st.error("Invalid username or password")
+                    st.error("Please enter both username and password")
     
     with auth_tab2:
         with st.form("Sign Up"):
@@ -713,9 +890,9 @@ else:
                 
                 if st.form_submit_button("Save Changes"):
                     # Update user in database
-                    c = conn.cursor()
-                    profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
                     try:
+                        c = conn.cursor()
+                        profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
                         c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
                                  (new_username, new_email, new_bio, profile_pic_data, user_id))
                         conn.commit()
@@ -725,3 +902,8 @@ else:
                         st.rerun()
                     except sqlite3.Error as e:
                         st.error(f"Error updating profile: {e}")
+                    finally:
+                        try:
+                            c.close()
+                        except:
+                            pass
