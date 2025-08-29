@@ -116,11 +116,17 @@ conn = init_db()
 def create_user(username, password, email, profile_pic=None, bio=""):
     c = conn.cursor()
     try:
+        # Check if the user already exists
+        c.execute("SELECT id FROM users WHERE username=?", (username,))
+        if c.fetchone():
+            return False
+            
         c.execute("INSERT INTO users (username, password, email, profile_pic, bio) VALUES (?, ?, ?, ?, ?)",
                  (username, password, email, profile_pic, bio))
         conn.commit()
         return True
-    except sqlite3.IntegrityError:
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
         return False
 
 def verify_user(username, password):
@@ -182,13 +188,16 @@ def like_post(user_id, post_id):
         
         # Get post owner
         c.execute("SELECT user_id FROM posts WHERE id=?", (post_id,))
-        post_owner = c.fetchone()[0]
-        
-        # Create notification for like
-        user = get_user(user_id)
-        c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-                 (post_owner, f"{user[1]} liked your post"))
-        conn.commit()
+        post_owner_result = c.fetchone()
+        if post_owner_result:
+            post_owner = post_owner_result[0]
+            
+            # Create notification for like
+            user = get_user(user_id)
+            if user:
+                c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                         (post_owner, f"{user[1]} liked your post"))
+                conn.commit()
         return True
     return False
 
@@ -202,9 +211,10 @@ def follow_user(follower_id, following_id):
         
         # Create notification for follow
         follower = get_user(follower_id)
-        c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-                 (following_id, f"{follower[1]} started following you"))
-        conn.commit()
+        if follower:
+            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                     (following_id, f"{follower[1]} started following you"))
+            conn.commit()
         return True
     return False
 
@@ -227,9 +237,10 @@ def send_message(sender_id, receiver_id, content):
     
     # Create notification for message
     sender = get_user(sender_id)
-    c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-             (receiver_id, f"New message from {sender[1]}"))
-    conn.commit()
+    if sender:
+        c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                 (receiver_id, f"New message from {sender[1]}"))
+        conn.commit()
     return True
 
 def get_messages(user1_id, user2_id):
@@ -326,9 +337,10 @@ def start_call(caller_id, receiver_id):
     
     # Create notification for call
     caller = get_user(caller_id)
-    c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-             (receiver_id, f"📞 Incoming call from {caller[1]}"))
-    conn.commit()
+    if caller:
+        c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                 (receiver_id, f"📞 Incoming call from {caller[1]}"))
+        conn.commit()
     return call_id
 
 # ===================================
@@ -398,9 +410,9 @@ with st.sidebar:
     
     if st.session_state.user:
         user_info = get_user(st.session_state.user[0])
-        if user_info[3]:  # Profile picture
+        if user_info and user_info[3]:  # Profile picture
             st.image(io.BytesIO(user_info[3]), width=100)
-        st.success(f"Welcome, {user_info[1]}!")
+        st.success(f"Welcome, {user_info[1]}!" if user_info else "Welcome!")
         
         # Navigation
         if st.button("🏠 Feed"):
@@ -423,9 +435,9 @@ with st.sidebar:
 
 # Authentication
 if not st.session_state.user:
-    auth_tab = st.tabs(["Login", "Sign Up"])
+    auth_tab1, auth_tab2 = st.tabs(["Login", "Sign Up"])
     
-    with auth_tab[0]:
+    with auth_tab1:
         with st.form("Login"):
             username = st.text_input("Username")
             password = st.text_input("Password", type="password")
@@ -437,7 +449,7 @@ if not st.session_state.user:
                 else:
                     st.error("Invalid username or password")
     
-    with auth_tab[1]:
+    with auth_tab2:
         with st.form("Sign Up"):
             new_username = st.text_input("Choose a username")
             new_email = st.text_input("Email")
@@ -449,6 +461,8 @@ if not st.session_state.user:
             if st.form_submit_button("Create Account"):
                 if new_password != confirm_password:
                     st.error("Passwords don't match")
+                elif not new_username or not new_email or not new_password:
+                    st.error("Please fill in all required fields")
                 else:
                     profile_pic_data = profile_pic.read() if profile_pic else None
                     if create_user(new_username, new_password, new_email, profile_pic_data, bio):
@@ -494,7 +508,7 @@ else:
                     col1, col2 = st.columns([1, 20])
                     with col1:
                         user_info = get_user(post[1])
-                        if user_info[3]:  # Profile picture
+                        if user_info and user_info[3]:  # Profile picture
                             st.image(io.BytesIO(user_info[3]), width=40)
                     with col2:
                         st.write(f"**{post[2]}** · {post[6]}")
@@ -549,31 +563,34 @@ else:
         with col2:
             if st.session_state.current_chat:
                 other_user = get_user(st.session_state.current_chat)
-                st.subheader(f"Chat with {other_user[1]}")
-                
-                # Call button
-                if st.button("📞 Start Video Call"):
-                    call_id = start_call(user_id, st.session_state.current_chat)
-                    st.info(f"Calling {other_user[1]}... Call ID: {call_id}")
-                
-                # Messages
-                messages = get_messages(user_id, st.session_state.current_chat)
-                st.markdown("<div class='message-container'>", unsafe_allow_html=True)
-                
-                for msg in messages:
-                    if msg[1] == user_id:
-                        st.markdown(f"<div class='message sent'><b>You:</b> {msg[5]}</div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<div class='message received'><b>{msg[2]}:</b> {msg[5]}</div>", unsafe_allow_html=True)
-                
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-                # Send message
-                new_message = st.text_input("Type a message...", key="msg_input")
-                if st.button("Send", key="send_msg"):
-                    if new_message:
-                        send_message(user_id, st.session_state.current_chat, new_message)
-                        st.rerun()
+                if other_user:
+                    st.subheader(f"Chat with {other_user[1]}")
+                    
+                    # Call button
+                    if st.button("📞 Start Video Call"):
+                        call_id = start_call(user_id, st.session_state.current_chat)
+                        st.info(f"Calling {other_user[1]}... Call ID: {call_id}")
+                    
+                    # Messages
+                    messages = get_messages(user_id, st.session_state.current_chat)
+                    st.markdown("<div class='message-container'>", unsafe_allow_html=True)
+                    
+                    for msg in messages:
+                        if msg[1] == user_id:
+                            st.markdown(f"<div class='message sent'><b>You:</b> {msg[5]}</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div class='message received'><b>{msg[2]}:</b> {msg[5]}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    # Send message
+                    new_message = st.text_input("Type a message...", key="msg_input")
+                    if st.button("Send", key="send_msg"):
+                        if new_message:
+                            send_message(user_id, st.session_state.current_chat, new_message)
+                            st.rerun()
+                else:
+                    st.error("User not found")
             else:
                 st.info("Select a conversation or start a new chat")
     
@@ -603,81 +620,83 @@ else:
         
         for user in suggested_users:
             user_info = get_user(user[0])
-            with st.container():
-                st.markdown("<div class='user-card'>", unsafe_allow_html=True)
-                
-                col1, col2, col3 = st.columns([1, 3, 2])
-                with col1:
-                    if user_info[3]:  # Profile picture
-                        st.image(io.BytesIO(user_info[3]), width=50)
-                with col2:
-                    st.write(f"**{user_info[1]}**")
-                    if user_info[4]:  # Bio
-                        st.caption(user_info[4])
-                with col3:
-                    if is_following(user_id, user[0]):
-                        if st.button("Unfollow", key=f"unfollow_{user[0]}"):
-                            unfollow_user(user_id, user[0])
-                            st.rerun()
-                    else:
-                        if st.button("Follow", key=f"follow_{user[0]}"):
-                            follow_user(user_id, user[0])
-                            st.rerun()
-                
-                st.markdown("</div>", unsafe_allow_html=True)
+            if user_info:
+                with st.container():
+                    st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                    
+                    col1, col2, col3 = st.columns([1, 3, 2])
+                    with col1:
+                        if user_info[3]:  # Profile picture
+                            st.image(io.BytesIO(user_info[3]), width=50)
+                    with col2:
+                        st.write(f"**{user_info[1]}**")
+                        if user_info[4]:  # Bio
+                            st.caption(user_info[4])
+                    with col3:
+                        if is_following(user_id, user[0]):
+                            if st.button("Unfollow", key=f"unfollow_{user[0]}"):
+                                unfollow_user(user_id, user[0])
+                                st.rerun()
+                        else:
+                            if st.button("Follow", key=f"follow_{user[0]}"):
+                                follow_user(user_id, user[0])
+                                st.rerun()
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
     
     # Profile Page
     elif st.session_state.page == "Profile":
         user_info = get_user(user_id)
         
-        st.header(f"👤 {user_info[1]}'s Profile")
-        
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            if user_info[3]:  # Profile picture
-                st.image(io.BytesIO(user_info[3]), width=150)
-            else:
-                st.info("No profile picture")
+        if user_info:
+            st.header(f"👤 {user_info[1]}'s Profile")
             
-            # Profile stats
-            followers = get_followers(user_id)
-            following = get_following(user_id)
+            col1, col2 = st.columns([1, 2])
             
-            st.subheader("Stats")
-            st.write(f"**{len(followers)}** Followers")
-            st.write(f"**{len(following)}** Following")
+            with col1:
+                if user_info[3]:  # Profile picture
+                    st.image(io.BytesIO(user_info[3]), width=150)
+                else:
+                    st.info("No profile picture")
+                
+                # Profile stats
+                followers = get_followers(user_id)
+                following = get_following(user_id)
+                
+                st.subheader("Stats")
+                st.write(f"**{len(followers)}** Followers")
+                st.write(f"**{len(following)}** Following")
+                
+                # Edit profile
+                if st.button("Edit Profile"):
+                    st.session_state.page = "EditProfile"
+                    st.rerun()
             
-            # Edit profile
-            if st.button("Edit Profile"):
-                st.session_state.page = "EditProfile"
-                st.rerun()
-        
-        with col2:
-            st.write(f"**Bio:** {user_info[4] if user_info[4] else 'No bio yet'}")
-            
-            # User's posts
-            st.subheader("Your Posts")
-            user_posts = get_posts()  # Get all posts
-            user_posts = [p for p in user_posts if p[1] == user_id]
-            
-            if not user_posts:
-                st.info("You haven't posted anything yet")
-            else:
-                for post in user_posts:
-                    with st.container():
-                        st.markdown(f"<div class='post'>", unsafe_allow_html=True)
-                        st.write(f"**{post[2]}** · {post[6]}")
-                        st.write(post[3])
-                        
-                        if post[4] and post[5]:
-                            if post[4] == "image":
-                                st.image(io.BytesIO(post[5]), width=300)
-                            elif post[4] == "video":
-                                st.video(io.BytesIO(post[5]))
-                        
-                        st.write(f"❤️ {post[7]} likes")
-                        st.markdown("</div>", unsafe_allow_html=True)
+            with col2:
+                st.write(f"**Bio:** {user_info[4] if user_info[4] else 'No bio yet'}")
+                
+                # User's posts
+                st.subheader("Your Posts")
+                user_posts = get_posts()  # Get all posts
+                user_posts = [p for p in user_posts if p[1] == user_id]
+                
+                if not user_posts:
+                    st.info("You haven't posted anything yet")
+                else:
+                    for post in user_posts:
+                        with st.container():
+                            st.markdown(f"<div class='post'>", unsafe_allow_html=True)
+                            st.write(f"**{post[2]}** · {post[6]}")
+                            st.write(post[3])
+                            
+                            if post[4] and post[5]:
+                                if post[4] == "image":
+                                    st.image(io.BytesIO(post[5]), width=300)
+                                elif post[4] == "video":
+                                    st.video(io.BytesIO(post[5]))
+                            
+                            st.write(f"❤️ {post[7]} likes")
+                            st.markdown("</div>", unsafe_allow_html=True)
     
     # Edit Profile Page
     elif st.session_state.page == "EditProfile":
@@ -685,20 +704,24 @@ else:
         
         user_info = get_user(user_id)
         
-        with st.form("EditProfileForm"):
-            new_username = st.text_input("Username", value=user_info[1])
-            new_email = st.text_input("Email", value=user_info[2])
-            new_bio = st.text_area("Bio", value=user_info[4] if user_info[4] else "")
-            new_profile_pic = st.file_uploader("Profile Picture", type=["jpg", "png", "jpeg"])
-            
-            if st.form_submit_button("Save Changes"):
-                # Update user in database
-                c = conn.cursor()
-                profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
-                c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
-                         (new_username, new_email, new_bio, profile_pic_data, user_id))
-                conn.commit()
-                st.success("Profile updated successfully!")
-                time.sleep(1)
-                st.session_state.page = "Profile"
-                st.rerun()
+        if user_info:
+            with st.form("EditProfileForm"):
+                new_username = st.text_input("Username", value=user_info[1])
+                new_email = st.text_input("Email", value=user_info[2])
+                new_bio = st.text_area("Bio", value=user_info[4] if user_info[4] else "")
+                new_profile_pic = st.file_uploader("Profile Picture", type=["jpg", "png", "jpeg"])
+                
+                if st.form_submit_button("Save Changes"):
+                    # Update user in database
+                    c = conn.cursor()
+                    profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
+                    try:
+                        c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
+                                 (new_username, new_email, new_bio, profile_pic_data, user_id))
+                        conn.commit()
+                        st.success("Profile updated successfully!")
+                        time.sleep(1)
+                        st.session_state.page = "Profile"
+                        st.rerun()
+                    except sqlite3.Error as e:
+                        st.error(f"Error updating profile: {e}")
