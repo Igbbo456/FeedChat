@@ -6,6 +6,8 @@ import time
 from PIL import Image
 import io
 import base64
+import bcrypt
+import re
 
 # ===================================
 # Database Initialization
@@ -39,6 +41,7 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users (id)
     )
     """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts (user_id)")
 
     # Likes table
     c.execute("""
@@ -105,6 +108,7 @@ def init_db():
     """)
 
     conn.commit()
+    c.close()
     return conn
 
 # Initialize database
@@ -113,72 +117,76 @@ conn = init_db()
 # ===================================
 # Helper Functions
 # ===================================
+def is_valid_email(email):
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+def is_valid_username(username):
+    return len(username) >= 3 and username.isalnum()
+
 def create_user(username, password, email, profile_pic=None, bio=""):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
-        # Check if the user already exists
+        if not is_valid_username(username):
+            st.error("Username must be at least 3 characters long and alphanumeric")
+            return False
+        if not is_valid_email(email):
+            st.error("Invalid email format")
+            return False
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         c.execute("SELECT id FROM users WHERE username=?", (username,))
         if c.fetchone():
+            st.error("Username already exists")
             return False
-            
         c.execute("INSERT INTO users (username, password, email, profile_pic, bio) VALUES (?, ?, ?, ?, ?)",
-                 (username, password, email, profile_pic, bio))
+                 (username, hashed_password, email, profile_pic, bio))
         conn.commit()
         return True
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
         return False
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def verify_user(username, password):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
-        c.execute("SELECT id, username FROM users WHERE username=? AND password=?", (username, password))
-        return c.fetchone()
+        c.execute("SELECT id, username, password FROM users WHERE username=?", (username,))
+        user = c.fetchone()
+        if user and bcrypt.checkpw(password.encode('utf-8'), user[2]):
+            return (user[0], user[1])
+        return None
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
         return None
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_user(user_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE id=?", (user_id,))
         return c.fetchone()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
         return None
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_user_by_username(username):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE username=?", (username,))
         return c.fetchone()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
         return None
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def create_post(user_id, content, media_type=None, media_data=None):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("INSERT INTO posts (user_id, content, media_type, media_data) VALUES (?, ?, ?, ?)",
                  (user_id, content, media_type, media_data))
         conn.commit()
@@ -187,14 +195,11 @@ def create_post(user_id, content, media_type=None, media_data=None):
         st.error(f"Database error: {e}")
         return None
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_posts(user_id=None):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         if user_id:
             c.execute("""
                 SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
@@ -223,27 +228,19 @@ def get_posts(user_id=None):
         st.error(f"Database error: {e}")
         return []
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def like_post(user_id, post_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
-        # Check if already liked
         c.execute("SELECT id FROM likes WHERE user_id=? AND post_id=?", (user_id, post_id))
         if not c.fetchone():
             c.execute("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", (user_id, post_id))
             conn.commit()
-            
-            # Get post owner
             c.execute("SELECT user_id FROM posts WHERE id=?", (post_id,))
             post_owner_result = c.fetchone()
             if post_owner_result:
                 post_owner = post_owner_result[0]
-                
-                # Create notification for like
                 user = get_user(user_id)
                 if user:
                     c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
@@ -255,21 +252,15 @@ def like_post(user_id, post_id):
         st.error(f"Database error: {e}")
         return False
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def follow_user(follower_id, following_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
-        # Check if already following
         c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         if not c.fetchone():
             c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
             conn.commit()
-            
-            # Create notification for follow
             follower = get_user(follower_id)
             if follower:
                 c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
@@ -281,14 +272,11 @@ def follow_user(follower_id, following_id):
         st.error(f"Database error: {e}")
         return False
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def unfollow_user(follower_id, following_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         conn.commit()
         return c.rowcount > 0
@@ -296,33 +284,25 @@ def unfollow_user(follower_id, following_id):
         st.error(f"Database error: {e}")
         return False
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def is_following(follower_id, following_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         return c.fetchone() is not None
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
         return False
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def send_message(sender_id, receiver_id, content):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
                  (sender_id, receiver_id, content))
         conn.commit()
-        
-        # Create notification for message
         sender = get_user(sender_id)
         if sender:
             c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
@@ -333,14 +313,11 @@ def send_message(sender_id, receiver_id, content):
         st.error(f"Database error: {e}")
         return False
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_messages(user1_id, user2_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("""
             SELECT m.id, m.sender_id, u1.username as sender, m.receiver_id, u2.username as receiver, 
                    m.content, m.is_read, m.created_at
@@ -355,14 +332,11 @@ def get_messages(user1_id, user2_id):
         st.error(f"Database error: {e}")
         return []
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_conversations(user_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("""
             SELECT DISTINCT 
                 CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END as other_user_id,
@@ -387,54 +361,46 @@ def get_conversations(user_id):
         st.error(f"Database error: {e}")
         return []
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def mark_messages_as_read(sender_id, receiver_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("UPDATE messages SET is_read=1 WHERE sender_id=? AND receiver_id=?", (sender_id, receiver_id))
         conn.commit()
+        return True
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
+        return False
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_notifications(user_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("SELECT id, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
         return []
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def mark_notification_as_read(notification_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("UPDATE notifications SET is_read=1 WHERE id=?", (notification_id,))
         conn.commit()
+        return True
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
+        return False
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_followers(user_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("""
             SELECT u.id, u.username 
             FROM follows f 
@@ -446,14 +412,11 @@ def get_followers(user_id):
         st.error(f"Database error: {e}")
         return []
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_following(user_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("""
             SELECT u.id, u.username 
             FROM follows f 
@@ -465,14 +428,11 @@ def get_following(user_id):
         st.error(f"Database error: {e}")
         return []
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def get_suggested_users(user_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         c.execute("""
             SELECT id, username 
             FROM users 
@@ -487,21 +447,15 @@ def get_suggested_users(user_id):
         st.error(f"Database error: {e}")
         return []
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 def start_call(caller_id, receiver_id):
+    c = conn.cursor()
     try:
-        c = conn.cursor()
         call_id = random.randint(100000, 999999)  # Simulate call ID
-        # In a real app, you would integrate with a WebRTC service here
         c.execute("INSERT INTO calls (caller_id, receiver_id, status, started_at) VALUES (?, ?, ?, ?)",
                  (caller_id, receiver_id, "initiated", datetime.datetime.now()))
         conn.commit()
-        
-        # Create notification for call
         caller = get_user(caller_id)
         if caller:
             c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
@@ -512,10 +466,7 @@ def start_call(caller_id, receiver_id):
         st.error(f"Database error: {e}")
         return None
     finally:
-        try:
-            c.close()
-        except:
-            pass
+        c.close()
 
 # ===================================
 # Streamlit UI
@@ -588,7 +539,6 @@ with st.sidebar:
             st.image(io.BytesIO(user_info[3]), width=100)
         st.success(f"Welcome, {user_info[1]}!" if user_info else "Welcome!")
         
-        # Navigation
         if st.button("🏠 Feed"):
             st.session_state.page = "Feed"
         if st.button("💬 Messages"):
@@ -645,17 +595,15 @@ if not st.session_state.user:
                     if create_user(new_username, new_password, new_email, profile_pic_data, bio):
                         st.success("Account created! Please login.")
                     else:
-                        st.error("Username already exists")
+                        st.error("Failed to create account. Please try again.")
 
 # Main App (after login)
 else:
     user_id = st.session_state.user[0]
     
-    # Feed Page
     if st.session_state.page == "Feed":
         st.header("📱 Feed")
         
-        # Create post
         with st.expander("Create a new post"):
             post_content = st.text_area("What's on your mind?")
             media_type = st.selectbox("Media type", ["None", "Image", "Video"])
@@ -672,7 +620,6 @@ else:
                 else:
                     st.warning("Post content or media is required")
         
-        # Display posts
         posts = get_posts(user_id)
         if not posts:
             st.info("No posts yet. Follow some users to see their posts here.")
@@ -681,27 +628,22 @@ else:
                 with st.container():
                     st.markdown(f"<div class='post'>", unsafe_allow_html=True)
                     
-                    # User info
                     col1, col2 = st.columns([1, 20])
                     with col1:
                         user_info = get_user(post[1])
-                        if user_info and user_info[3]:  # Profile picture
+                        if user_info and user_info[3]:
                             st.image(io.BytesIO(user_info[3]), width=40)
                     with col2:
                         st.write(f"**{post[2]}** · {post[6]}")
                     
-                    # Post content
                     st.write(post[3])
                     
-                    # Media
                     if post[4] and post[5]:
                         if post[4] == "image":
                             st.image(io.BytesIO(post[5]))
                         elif post[4] == "video":
-                            # For video, we would need a proper video player
                             st.video(io.BytesIO(post[5]))
                     
-                    # Like button
                     col1, col2 = st.columns(2)
                     with col1:
                         like_text = "❤️ Unlike" if post[8] else "🤍 Like"
@@ -712,7 +654,6 @@ else:
                     
                     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Messages Page
     elif st.session_state.page == "Messages":
         st.header("💬 Messages")
         
@@ -729,7 +670,6 @@ else:
                     mark_messages_as_read(conv[0], user_id)
                     st.rerun()
             
-            # Start new conversation
             st.subheader("Start New Chat")
             all_users = get_suggested_users(user_id)
             for user in all_users:
@@ -743,12 +683,10 @@ else:
                 if other_user:
                     st.subheader(f"Chat with {other_user[1]}")
                     
-                    # Call button
                     if st.button("📞 Start Video Call"):
                         call_id = start_call(user_id, st.session_state.current_chat)
                         st.info(f"Calling {other_user[1]}... Call ID: {call_id}")
                     
-                    # Messages
                     messages = get_messages(user_id, st.session_state.current_chat)
                     st.markdown("<div class='message-container'>", unsafe_allow_html=True)
                     
@@ -760,7 +698,6 @@ else:
                     
                     st.markdown("</div>", unsafe_allow_html=True)
                     
-                    # Send message
                     new_message = st.text_input("Type a message...", key="msg_input")
                     if st.button("Send", key="send_msg"):
                         if new_message:
@@ -771,7 +708,6 @@ else:
             else:
                 st.info("Select a conversation or start a new chat")
     
-    # Notifications Page
     elif st.session_state.page == "Notifications":
         st.header("🔔 Notifications")
         
@@ -788,7 +724,6 @@ else:
                         mark_notification_as_read(notif[0])
                         st.rerun()
     
-    # Discover Page
     elif st.session_state.page == "Discover":
         st.header("👥 Discover People")
         
@@ -803,11 +738,11 @@ else:
                     
                     col1, col2, col3 = st.columns([1, 3, 2])
                     with col1:
-                        if user_info[3]:  # Profile picture
+                        if user_info[3]:
                             st.image(io.BytesIO(user_info[3]), width=50)
                     with col2:
                         st.write(f"**{user_info[1]}**")
-                        if user_info[4]:  # Bio
+                        if user_info[4]:
                             st.caption(user_info[4])
                     with col3:
                         if is_following(user_id, user[0]):
@@ -821,7 +756,6 @@ else:
                     
                     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Profile Page
     elif st.session_state.page == "Profile":
         user_info = get_user(user_id)
         
@@ -831,12 +765,11 @@ else:
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                if user_info[3]:  # Profile picture
+                if user_info[3]:
                     st.image(io.BytesIO(user_info[3]), width=150)
                 else:
                     st.info("No profile picture")
                 
-                # Profile stats
                 followers = get_followers(user_id)
                 following = get_following(user_id)
                 
@@ -844,7 +777,6 @@ else:
                 st.write(f"**{len(followers)}** Followers")
                 st.write(f"**{len(following)}** Following")
                 
-                # Edit profile
                 if st.button("Edit Profile"):
                     st.session_state.page = "EditProfile"
                     st.rerun()
@@ -852,9 +784,8 @@ else:
             with col2:
                 st.write(f"**Bio:** {user_info[4] if user_info[4] else 'No bio yet'}")
                 
-                # User's posts
                 st.subheader("Your Posts")
-                user_posts = get_posts()  # Get all posts
+                user_posts = get_posts()
                 user_posts = [p for p in user_posts if p[1] == user_id]
                 
                 if not user_posts:
@@ -875,7 +806,6 @@ else:
                             st.write(f"❤️ {post[7]} likes")
                             st.markdown("</div>", unsafe_allow_html=True)
     
-    # Edit Profile Page
     elif st.session_state.page == "EditProfile":
         st.header("✏️ Edit Profile")
         
@@ -889,21 +819,22 @@ else:
                 new_profile_pic = st.file_uploader("Profile Picture", type=["jpg", "png", "jpeg"])
                 
                 if st.form_submit_button("Save Changes"):
-                    # Update user in database
-                    try:
+                    if not is_valid_username(new_username):
+                        st.error("Username must be at least 3 characters long and alphanumeric")
+                    elif not is_valid_email(new_email):
+                        st.error("Invalid email format")
+                    else:
                         c = conn.cursor()
-                        profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
-                        c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
-                                 (new_username, new_email, new_bio, profile_pic_data, user_id))
-                        conn.commit()
-                        st.success("Profile updated successfully!")
-                        time.sleep(1)
-                        st.session_state.page = "Profile"
-                        st.rerun()
-                    except sqlite3.Error as e:
-                        st.error(f"Error updating profile: {e}")
-                    finally:
                         try:
+                            profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
+                            c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
+                                     (new_username, new_email, new_bio, profile_pic_data, user_id))
+                            conn.commit()
+                            st.success("Profile updated successfully!")
+                            time.sleep(1)
+                            st.session_state.page = "Profile"
+                            st.rerun()
+                        except sqlite3.Error as e:
+                            st.error(f"Error updating profile: {e}")
+                        finally:
                             c.close()
-                        except:
-                            pass
