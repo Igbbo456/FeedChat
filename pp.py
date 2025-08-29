@@ -1,6 +1,5 @@
 import streamlit as st
 import sqlite3
-import datetime
 
 # ==============================
 # 📦 Database Setup
@@ -23,8 +22,6 @@ CREATE TABLE IF NOT EXISTS posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT,
     message TEXT,
-    media BLOB,
-    media_type TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )
 """)
@@ -52,14 +49,16 @@ CREATE TABLE IF NOT EXISTS likes (
 )
 """)
 
-# --- Notifications table ---
+# --- Messages table (DMs) ---
 c.execute("""
-CREATE TABLE IF NOT EXISTS notifications (
+CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT,
+    sender TEXT,
+    receiver TEXT,
     message TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    seen INTEGER DEFAULT 0
+    FOREIGN KEY (sender) REFERENCES users (username),
+    FOREIGN KEY (receiver) REFERENCES users (username)
 )
 """)
 
@@ -77,12 +76,15 @@ def verify_user(username, password):
     c.execute("SELECT 1 FROM users WHERE username=? AND password=?", (username, password))
     return c.fetchone() is not None
 
+def get_all_users():
+    c.execute("SELECT username FROM users")
+    return [u[0] for u in c.fetchall()]
+
 # ==============================
 # 📬 Posts, Comments & Likes
 # ==============================
-def add_post(username, message, media=None, media_type=None):
-    c.execute("INSERT INTO posts (username, message, media, media_type) VALUES (?, ?, ?, ?)",
-              (username, message, media, media_type))
+def add_post(username, message):
+    c.execute("INSERT INTO posts (username, message) VALUES (?, ?)", (username, message))
     conn.commit()
 
 def get_posts():
@@ -99,19 +101,39 @@ def get_comments(post_id):
     return c.fetchall()
 
 def add_like(post_id, username):
-    c.execute("INSERT INTO likes (post_id, username) VALUES (?, ?)", (post_id, username))
-    conn.commit()
+    # prevent duplicate likes
+    c.execute("SELECT 1 FROM likes WHERE post_id=? AND username=?", (post_id, username))
+    if not c.fetchone():
+        c.execute("INSERT INTO likes (post_id, username) VALUES (?, ?)", (post_id, username))
+        conn.commit()
 
 def count_likes(post_id):
     c.execute("SELECT COUNT(*) FROM likes WHERE post_id=?", (post_id,))
     return c.fetchone()[0]
 
 # ==============================
+# 💬 Messaging Functions
+# ==============================
+def send_message(sender, receiver, message):
+    c.execute("INSERT INTO messages (sender, receiver, message) VALUES (?, ?, ?)",
+              (sender, receiver, message))
+    conn.commit()
+
+def get_messages(user1, user2):
+    c.execute("""
+        SELECT sender, message, timestamp 
+        FROM messages
+        WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)
+        ORDER BY id ASC
+    """, (user1, user2, user2, user1))
+    return c.fetchall()
+
+# ==============================
 # 🌐 Streamlit App
 # ==============================
 st.set_page_config(page_title="📱 FeedChat", layout="wide")
 
-menu = ["Login", "Signup", "Feed"]
+menu = ["Login", "Signup", "Feed", "Messages"]
 choice = st.sidebar.selectbox("Menu", menu)
 
 # --- Signup ---
@@ -144,7 +166,7 @@ elif choice == "Login":
         else:
             st.error("❌ Invalid username or password")
 
-# --- Feed ---
+# --- Feed (Posts, Likes, Comments) ---
 elif choice == "Feed" or st.session_state.get("menu") == "Feed":
     if "user" not in st.session_state:
         st.warning("⚠️ Please login first.")
@@ -190,3 +212,31 @@ elif choice == "Feed" or st.session_state.get("menu") == "Feed":
             with st.expander("View Comments"):
                 for cu, cm, ct in get_comments(pid):
                     st.markdown(f"- **{cu}**: {cm} 🕒 {ct}")
+
+# --- Messages (DMs) ---
+elif choice == "Messages":
+    if "user" not in st.session_state:
+        st.warning("⚠️ Please login first.")
+    else:
+        st.subheader("💬 Messages")
+
+        all_users = [u for u in get_all_users() if u != st.session_state["user"]]
+        receiver = st.selectbox("Send a message to:", all_users)
+
+        msg = st.text_input("Type your message...")
+        if st.button("Send"):
+            if msg.strip():
+                send_message(st.session_state["user"], receiver, msg)
+                st.success("✅ Message sent!")
+                st.rerun()
+            else:
+                st.warning("⚠️ Message cannot be empty")
+
+        if receiver:
+            st.write(f"### Chat with {receiver}")
+            chat = get_messages(st.session_state["user"], receiver)
+            for sender, message, ts in chat:
+                if sender == st.session_state["user"]:
+                    st.markdown(f"<p style='text-align:right; color:blue;'>💬 You: {message} 🕒 {ts}</p>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<p style='text-align:left; color:green;'>💬 {sender}: {message} 🕒 {ts}</p>", unsafe_allow_html=True)
