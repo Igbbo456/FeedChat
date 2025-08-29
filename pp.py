@@ -57,8 +57,9 @@ def get_posts(user=None):
     return c.fetchall()
 
 def like_post(post_id, username):
-    c.execute("INSERT INTO likes VALUES (?, ?)", (post_id, username))
-    conn.commit()
+    if not has_liked(post_id, username):  # Prevent duplicate likes
+        c.execute("INSERT INTO likes VALUES (?, ?)", (post_id, username))
+        conn.commit()
 
 def unlike_post(post_id, username):
     c.execute("DELETE FROM likes WHERE post_id=? AND username=?", (post_id, username))
@@ -100,8 +101,9 @@ def get_messages(user1, user2):
 
 # ----- Follow System -----
 def follow_user(follower, following):
-    c.execute("INSERT INTO followers VALUES (?, ?)", (follower, following))
-    conn.commit()
+    if not is_following(follower, following):
+        c.execute("INSERT INTO followers VALUES (?, ?)", (follower, following))
+        conn.commit()
 
 def unfollow_user(follower, following):
     c.execute("DELETE FROM followers WHERE follower=? AND following=?", (follower, following))
@@ -160,7 +162,8 @@ if "username" in st.session_state:
         else:
             for post in posts:
                 post_id, user, message, image, timestamp = post
-                u, pic = get_user(user)
+                udata = get_user(user)
+                u, pic = udata if udata else (user, None)
 
                 col1, col2 = st.columns([1, 8])
                 with col1:
@@ -191,7 +194,8 @@ if "username" in st.session_state:
                 st.markdown("💬 Comments:")
                 comments = get_comments(post_id)
                 for cu, cm, ct in comments:
-                    cu_name, cu_pic = get_user(cu)
+                    cu_data = get_user(cu)
+                    cu_name, cu_pic = cu_data if cu_data else (cu, None)
                     colc1, colc2 = st.columns([1, 8])
                     with colc1:
                         if cu_pic:
@@ -244,26 +248,28 @@ if "username" in st.session_state:
     # --- Profile ---
     with tab4:
         st.subheader("👤 Profile")
-        u, pic = get_user(st.session_state.username)
-        if pic:
-            st.image(pic, width=120)
-        st.markdown(f"**Username:** {u}")
+        udata = get_user(st.session_state.username)
+        if udata:
+            u, pic = udata
+            if pic:
+                st.image(pic, width=120)
+            st.markdown(f"**Username:** {u}")
 
-        # Show followers/following/likes table
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Followers", count_followers(u))
-        with col2:
-            st.metric("Following", count_following(u))
-        with col3:
-            st.metric("Total Likes", count_total_likes(u))
+            # Show followers/following/likes table
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Followers", count_followers(u))
+            with col2:
+                st.metric("Following", count_following(u))
+            with col3:
+                st.metric("Total Likes", count_total_likes(u))
 
         # View other user’s profile
         other_user = st.text_input("Enter username to view profile")
         if other_user:
-            user_data = get_user(other_user)
-            if user_data:
-                ou, opic = user_data
+            udata = get_user(other_user)
+            if udata:
+                ou, opic = udata
                 st.markdown(f"### {ou}'s Profile")
                 if opic:
                     st.image(opic, width=100)
@@ -298,4 +304,3 @@ if "username" in st.session_state:
                         st.image(img, use_container_width=True)
             else:
                 st.error("User not found.")
-
