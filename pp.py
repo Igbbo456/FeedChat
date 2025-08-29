@@ -1,99 +1,58 @@
 import streamlit as st
 import sqlite3
-import datetime
-import av
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+import time
+from datetime import datetime
+from PIL import Image
 
-# ==============================
-# 📦 Database Setup
-# ==============================
+# ======================
+# Database Setup
+# ======================
 conn = sqlite3.connect("feedchat.db", check_same_thread=False)
 c = conn.cursor()
 
-# --- Users table ---
-c.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    username TEXT PRIMARY KEY,
-    password TEXT,
-    profile_pic BLOB
-)
-""")
-
-# --- Posts table ---
-c.execute("""
-CREATE TABLE IF NOT EXISTS posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT,
-    message TEXT,
-    media BLOB,
-    media_type TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-)
-""")
-
-# --- Comments table ---
-c.execute("""
-CREATE TABLE IF NOT EXISTS comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id INTEGER,
-    username TEXT,
-    comment TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (post_id) REFERENCES posts (id)
-)
-""")
-
-# --- Likes table ---
-c.execute("""
-CREATE TABLE IF NOT EXISTS likes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id INTEGER,
-    username TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (post_id) REFERENCES posts (id)
-)
-""")
-
-# --- Notifications table ---
-c.execute("""
-CREATE TABLE IF NOT EXISTS notifications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT,
-    message TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    seen INTEGER DEFAULT 0
-)
-""")
-
-conn.commit()
-
-# ==============================
-# 👤 User Functions
-# ==============================
-def add_user(username, password, profile_pic=None):
-    c.execute("INSERT OR REPLACE INTO users (username, password, profile_pic) VALUES (?, ?, ?)",
-              (username, password, profile_pic))
+def init_db():
+    c.execute("""CREATE TABLE IF NOT EXISTS users
+                 (username TEXT PRIMARY KEY, password TEXT, profile_pic BLOB)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS posts
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, content TEXT, timestamp TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS comments
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, username TEXT, comment TEXT, timestamp TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS likes
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER, username TEXT)""")
     conn.commit()
+
+init_db()
+
+# ======================
+# User Management
+# ======================
+def add_user(username, password, profile_pic):
+    try:
+        c.execute("INSERT INTO users (username, password, profile_pic) VALUES (?, ?, ?)",
+                  (username, password, profile_pic))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        pass
 
 def verify_user(username, password):
     c.execute("SELECT 1 FROM users WHERE username=? AND password=?", (username, password))
     return c.fetchone() is not None
 
-# ==============================
-# 📬 Posts, Comments & Likes
-# ==============================
-def add_post(username, message, media=None, media_type=None):
-    c.execute("INSERT INTO posts (username, message, media, media_type) VALUES (?, ?, ?, ?)",
-              (username, message, media, media_type))
+# ======================
+# Posts
+# ======================
+def add_post(username, content):
+    c.execute("INSERT INTO posts (username, content, timestamp) VALUES (?, ?, ?)",
+              (username, content, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()
 
 def get_posts():
-    c.execute("SELECT id, username, message, timestamp FROM posts ORDER BY id DESC")
+    c.execute("SELECT id, username, content, timestamp FROM posts ORDER BY id DESC")
     return c.fetchall()
 
 def add_comment(post_id, username, comment):
-    c.execute("INSERT INTO comments (post_id, username, comment) VALUES (?, ?, ?)",
-              (post_id, username, comment))
+    c.execute("INSERT INTO comments (post_id, username, comment, timestamp) VALUES (?, ?, ?, ?)",
+              (post_id, username, comment, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()
 
 def get_comments(post_id):
@@ -108,75 +67,71 @@ def count_likes(post_id):
     c.execute("SELECT COUNT(*) FROM likes WHERE post_id=?", (post_id,))
     return c.fetchone()[0]
 
-# ==============================
-# 🎥 Video Call Setup
-# ==============================
-class VideoTransformer(VideoTransformerBase):
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
-        return av.VideoFrame.from_ndarray(img, format="bgr24")
+# ======================
+# Streamlit UI
+# ======================
+st.title("📱 FeedChat")
 
-# ==============================
-# 🌐 Streamlit App
-# ==============================
-st.set_page_config(page_title="📱 FeedChat", layout="wide")
-
-menu = ["Login", "Signup", "Feed", "Video Call"]
+menu = ["Login", "Sign Up", "Feed"]
 choice = st.sidebar.selectbox("Menu", menu)
 
-# --- Signup ---
-if choice == "Signup":
-    st.subheader("Create a New Account")
+if choice == "Sign Up":
+    st.subheader("Create New Account")
     new_user = st.text_input("Username")
     new_pass = st.text_input("Password", type="password")
-    pic = st.file_uploader("Upload Profile Picture", type=["jpg", "png"])
+    profile_pic = st.file_uploader("Upload Profile Picture", type=["png", "jpg", "jpeg"])
+    pic_bytes = profile_pic.read() if profile_pic else None
+    if st.button("Sign Up"):
+        add_user(new_user, new_pass, pic_bytes)
+        st.success("Account created! Please login.")
 
-    if st.button("Signup"):
-        pic_bytes = pic.read() if pic else None
-        add_user(new_user.strip(), new_pass, pic_bytes)
-        st.success("✅ Account created! Go to Login.")
-
-# --- Login ---
 elif choice == "Login":
-    st.subheader("Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
+    st.subheader("Login to FeedChat")
+    user = st.text_input("Username")
+    pw = st.text_input("Password", type="password")
     if st.button("Login"):
-        if verify_user(username, password):
-            st.session_state["user"] = username
-            st.success(f"Welcome {username} 👋")
+        if verify_user(user, pw):
+            st.session_state.username = user
+            st.success(f"Welcome back {user}!")
         else:
-            st.error("❌ Invalid username or password")
+            st.error("Invalid username or password")
 
-# --- Feed ---
 elif choice == "Feed":
-    if "user" not in st.session_state:
-        st.warning("⚠️ Please login first.")
+    if "username" not in st.session_state:
+        st.warning("Please login first.")
     else:
-        st.subheader("📢 Feed")
-        post_msg = st.text_area("What's happening?")
+        st.subheader("Your Feed")
+        post_content = st.text_area("What's on your mind?")
         if st.button("Post"):
-            add_post(st.session_state["user"], post_msg)
-            st.success("✅ Post added!")
+            if post_content.strip():
+                add_post(st.session_state.username, post_content)
+                st.success("Posted successfully!")
+                time.sleep(1)
+                st.experimental_rerun()
 
-        st.write("### Recent Posts")
         posts = get_posts()
-        for pid, uname, msg, ts in posts:
-            st.markdown(f"**{uname}** 🕒 {ts}")
-            st.write(msg)
-
+        for pid, uname, content, timestamp in posts:
+            st.markdown(f"**{uname}** at {timestamp}")
+            st.write(content)
+            if st.button(f"👍 Like {pid}", key=f"like_{pid}"):
+                add_like(pid, st.session_state.username)
+                st.experimental_rerun()
             st.write(f"👍 {count_likes(pid)}  ·  💬 {len(get_comments(pid))}")
-            if st.button(f"Like {pid}"):
-                add_like(pid, st.session_state["user"])
-            comment = st.text_input(f"Comment on {pid}", key=f"c{pid}")
-            if st.button(f"Add Comment {pid}"):
-                add_comment(pid, st.session_state["user"], comment)
-            with st.expander("View Comments"):
-                for cu, cm, ct in get_comments(pid):
-                    st.markdown(f"- **{cu}**: {cm} 🕒 {ct}")
 
-# --- Video Call ---
-elif choice == "Video Call":
-    st.subheader("🎥 Video Chat Room")
-    webrtc_streamer(key="video", video_transformer_factory=VideoTransformer)
+            with st.expander("Comments"):
+                for cuser, comment, ctime in get_comments(pid):
+                    st.markdown(f"**{cuser}** at {ctime}")
+                    st.write(comment)
+                new_comment = st.text_input("Add a comment:", key=f"comment_{pid}")
+                if st.button("Submit", key=f"submit_{pid}"):
+                    if new_comment.strip():
+                        add_comment(pid, st.session_state.username, new_comment)
+                        st.experimental_rerun()
+
+# ======================
+# NOTE: Video Call Disabled
+# ======================
+# The video call feature is disabled to prevent av/streamlit-webrtc errors
+# Uncomment later if av is installed
+# from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+# webrtc_streamer(key="video_call")
