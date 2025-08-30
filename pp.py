@@ -146,6 +146,34 @@ def mark_notifications_seen(username):
 # ===================================
 st.set_page_config(page_title="📱 FeedChat", layout="wide")
 
+# --- CSS Styling ---
+st.markdown("""
+<style>
+    body {background-color: #f5f6fa;}
+    .post-card {
+        background: white;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 12px;
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+    }
+    .post-user {
+        font-weight: bold;
+        color: #2d3436;
+    }
+    .post-time {
+        font-size: 12px;
+        color: #636e72;
+    }
+    .comment-box {
+        background: #f1f2f6;
+        padding: 8px;
+        border-radius: 8px;
+        margin: 3px 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 if "user" not in st.session_state:
     st.session_state["user"] = None
 if "page" not in st.session_state:
@@ -228,10 +256,15 @@ else:
 
             posts = get_posts()
             for pid, uname, msg, ts in posts:
-                st.markdown(f"**{uname}** 🕒 {ts}")
-                st.write(msg)
-                st.write(f"👍 {count_likes(pid)} · 💬 {len(get_comments(pid))}")
+                st.markdown(f"""
+                <div class="post-card">
+                    <span class="post-user">{uname}</span> · 
+                    <span class="post-time">{ts}</span>
+                    <p>{msg}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
+                st.write(f"👍 {count_likes(pid)} · 💬 {len(get_comments(pid))}")
                 c1, c2 = st.columns([1, 2])
                 if c1.button(f"👍 Like {pid}"):
                     add_like(pid, st.session_state["user"])
@@ -246,7 +279,7 @@ else:
 
                 with st.expander("💬 View Comments"):
                     for cu, cm, ct in get_comments(pid):
-                        st.markdown(f"- **{cu}**: {cm} 🕒 {ct}")
+                        st.markdown(f"<div class='comment-box'><b>{cu}</b>: {cm} <br><span style='font-size:11px; color:gray;'>{ct}</span></div>", unsafe_allow_html=True)
                 st.divider()
 
         elif st.session_state["page"] == "Messages":
@@ -254,7 +287,6 @@ else:
             all_users = [u for u in get_all_users() if u != st.session_state["user"]]
             receiver = st.selectbox("Chat with:", all_users)
 
-            # 🔄 Auto-refresh chat every 3s
             st_autorefresh(interval=3000, key="message_refresh")
 
             msg = st.text_input("Type a message")
@@ -269,12 +301,12 @@ else:
                 for sender, message, ts in chat:
                     if sender == st.session_state["user"]:
                         st.markdown(
-                            f"<p style='text-align:right; color:blue;'>You: {message} 🕒 {ts}</p>",
+                            f"<p style='text-align:right; background:#dfe6e9; padding:8px; border-radius:8px;'>You: {message} 🕒 {ts}</p>",
                             unsafe_allow_html=True,
                         )
                     else:
                         st.markdown(
-                            f"<p style='text-align:left; color:green;'>{sender}: {message} 🕒 {ts}</p>",
+                            f"<p style='text-align:left; background:#ffeaa7; padding:8px; border-radius:8px;'>{sender}: {message} 🕒 {ts}</p>",
                             unsafe_allow_html=True,
                         )
 
