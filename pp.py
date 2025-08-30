@@ -6,8 +6,6 @@ import time
 from PIL import Image
 import io
 import base64
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
-import av
 import threading
 import queue
 
@@ -75,16 +73,15 @@ def init_db():
     )
     """)
 
-    # Calls table - Updated for WebRTC
+    # Calls table - Simplified for Jitsi integration
     c.execute("""
     CREATE TABLE IF NOT EXISTS calls (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         caller_id INTEGER,
         receiver_id INTEGER,
-        room_id TEXT UNIQUE,
-        status TEXT DEFAULT 'ringing',
-        started_at DATETIME,
-        ended_at DATETIME
+        meeting_url TEXT,
+        status TEXT DEFAULT 'scheduled',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
@@ -104,24 +101,6 @@ def init_db():
 
 # Initialize database
 conn = init_db()
-
-# ===================================
-# WebRTC Configuration
-# ===================================
-RTC_CONFIG = RTCConfiguration({
-    "iceServers": [
-        {"urls": ["stun:stun.l.google.com:19302"]},
-        {"urls": ["stun:stun1.l.google.com:19302"]}
-    ]
-})
-
-# Global state for active calls
-if "active_calls" not in st.session_state:
-    st.session_state.active_calls = {}
-if "current_call" not in st.session_state:
-    st.session_state.current_call = None
-if "call_status" not in st.session_state:
-    st.session_state.call_status = "idle"
 
 # ===================================
 # Helper Functions
@@ -154,7 +133,7 @@ def verify_user(username, password):
         result = c.fetchone()
         return result
     except sqlite3.Error as e:
-        st.error(f"Database error: {e}")
+        st.error(f极"Database error: {e}")
         return None
     finally:
         try:
@@ -165,7 +144,7 @@ def verify_user(username, password):
 def get_user(user_id):
     try:
         c = conn.cursor()
-        c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE id=?", (user_id,))
+        c.execute("SELECT id, username, email, profile极_pic, bio FROM users WHERE id=?", (user_id,))
         return c.fetchone()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -223,11 +202,11 @@ def get_posts(user_id=None):
             """, (user_id, user_id, user_id))
         else:
             c.execute("""
-                SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
+                SELECT p.id极, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
                        COUNT(l.id) as like_count,
                        0 as user_liked
                 FROM posts p
-                JOIN users u ON p.user_id = u.id
+                JOIN users极 u ON p.user_id = u.id
                 LEFT JOIN likes l ON p.id = l.post_id
                 GROUP BY p.id
                 ORDER BY p.created_at DESC
@@ -245,9 +224,9 @@ def get_posts(user_id=None):
 def like_post(user_id, post_id):
     try:
         c = conn.cursor()
-        c.execute("SELECT id FROM likes WHERE user_id=? AND post_id=?", (user_id, post_id))
+        c.execute("SELECT id FROM likes WHERE user_id=? AND post_id=?", (user极_id, post_id))
         if not c.fetchone():
-            c.execute("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", (user_id, post_id))
+            c.execute("INSERT INTO likes (user_id, post_id极) VALUES (?, ?)", (user_id, post_id))
             conn.commit()
             
             c.execute("SELECT user_id FROM posts WHERE id=?", (post_id,))
@@ -290,7 +269,7 @@ def follow_user(follower_id, following_id):
         st.error(f"Database error: {e}")
         return False
     finally:
-        try:
+       极 try:
             c.close()
         except:
             pass
@@ -333,7 +312,7 @@ def send_message(sender_id, receiver_id, content):
         
         sender = get_user(sender_id)
         if sender:
-            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+            c.execute("INSERT INTO notifications (user_id, content) VALUES极 (?, ?)",
                      (receiver_id, f"New message from {sender[1]}"))
             conn.commit()
         return True
@@ -416,7 +395,7 @@ def mark_messages_as_read(sender_id, receiver_id):
 def get_notifications(user_id):
     try:
         c = conn.cursor()
-        c.execute("SELECT id, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
+        c.execute("SELECT id极, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -489,7 +468,7 @@ def get_suggested_users(user_id):
             )
             ORDER BY RANDOM() 
             LIMIT 5
-        """, (user_id, user_id))
+        """, (极user_id, user_id))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -501,37 +480,30 @@ def get_suggested_users(user_id):
             pass
 
 # ===================================
-# WebRTC Video Call Functions
+# Video Call Functions (Jitsi Integration)
 # ===================================
-def generate_room_id():
-    return f"room_{random.randint(100000, 999999)}_{int(time.time())}"
+def generate_meeting_id():
+    return f"FeedChat_{random.randint(100000, 999999)}_{int(time.time())}"
 
-def start_video_call(caller_id, receiver_id):
+def create_video_call(caller_id, receiver_id):
     try:
         c = conn.cursor()
-        room_id = generate_room_id()
+        meeting_id = generate_meeting_id()
+        meeting_url = f"https://meet.jit.si/{meeting_id}"
         
         # Create call record
-        c.execute("INSERT INTO calls (caller_id, receiver_id, room_id, status, started_at) VALUES (?, ?, ?, ?, ?)",
-                 (caller_id, receiver_id, room_id, "ringing", datetime.datetime.now()))
+        c.execute("INSERT INTO calls (caller_id, receiver_id, meeting_url, status) VALUES (?, ?, ?, ?)",
+                 (caller_id, receiver_id, meeting_url, "scheduled"))
         conn.commit()
         
         # Create notification
         caller = get_user(caller_id)
         if caller:
             c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-                     (receiver_id, f"📞 Incoming video call from {caller[1]}"))
+                     (receiver_id, f"📞 Video call invitation from {caller[1]}"))
             conn.commit()
         
-        # Store active call
-        st.session_state.active_calls[room_id] = {
-            "caller_id": caller_id,
-            "receiver_id": receiver_id,
-            "status": "ringing",
-            "started_at": datetime.datetime.now()
-        }
-        
-        return room_id
+        return meeting_url
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
         return None
@@ -541,37 +513,30 @@ def start_video_call(caller_id, receiver_id):
         except:
             pass
 
-def get_active_call(user_id):
+def get_pending_calls(user_id):
     try:
         c = conn.cursor()
         c.execute("""
-            SELECT room_id, caller_id, receiver_id, status 
+            SELECT id, caller_id, meeting_url, created_at 
             FROM calls 
-            WHERE (caller_id=? OR receiver_id=?) AND status IN ('ringing', 'active')
-            ORDER BY started_at DESC LIMIT 1
-        """, (user_id, user_id))
-        return c.fetchone()
+            WHERE receiver_id=? AND status='scheduled'
+            ORDER BY created_at DESC
+        """, (user_id,))
+        return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
-        return None
+        return []
     finally:
         try:
             c.close()
         except:
             pass
 
-def update_call_status(room_id, status):
+def update_call_status(call_id, status):
     try:
         c = conn.cursor()
-        c.execute("UPDATE calls SET status=?, ended_at=CASE WHEN ?='ended' THEN CURRENT_TIMESTAMP ELSE NULL END WHERE room_id=?",
-                 (status, status, room_id))
+        c.execute("UPDATE calls SET status=? WHERE id=?", (status, call_id))
         conn.commit()
-        
-        if room_id in st.session_state.active_calls:
-            st.session_state.active_calls[room_id]["status"] = status
-            if status == "ended":
-                del st.session_state.active_calls[room_id]
-        
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
     finally:
@@ -580,29 +545,8 @@ def update_call_status(room_id, status):
         except:
             pass
 
-def answer_call(room_id):
-    update_call_status(room_id, "active")
-    st.session_state.current_call = room_id
-    st.session_state.call_status = "active"
-    st.rerun()
-
-def end_call(room_id):
-    update_call_status(room_id, "ended")
-    st.session_state.current_call = None
-    st.session_state.call_status = "idle"
-    st.rerun()
-
-# Video processor for WebRTC
-class VideoProcessor:
-    def __init__(self):
-        self.frames_queue = queue.Queue()
-    
-    def recv(self, frame):
-        self.frames_queue.put(frame)
-        return frame
-
 # ===================================
-# Streamlit UI with WebRTC Video Calls
+# Streamlit UI
 # ===================================
 st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide", initial_sidebar_state="expanded")
 
@@ -666,14 +610,24 @@ st.markdown("""
         color: white;
     }
     
-    .end-call-btn {
-        background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+    .jitsi-button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         padding: 15px 30px;
         border-radius: 50px;
         border: none;
         font-size: 16px;
         font-weight: bold;
+        text-decoration: none;
+        display: inline-block;
+        margin: 10px;
+    }
+    
+    .jitsi-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        color: white;
+        text-decoration: none;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -689,15 +643,8 @@ if "message_input" not in st.session_state:
     st.session_state.message_input = ""
 if "last_message_id" not in st.session_state:
     st.session_state.last_message_id = 0
-
-# Check for incoming calls
-def check_incoming_calls():
-    if st.session_state.user:
-        user_id = st.session_state.user[0]
-        active_call = get_active_call(user_id)
-        if active_call and active_call[3] == "ringing":
-            st.session_state.current_call = active_call[0]
-            st.session_state.call_status = "ringing"
+if "active_meeting" not in st.session_state:
+    st.session_state.active_meeting = None
 
 # Sidebar
 with st.sidebar:
@@ -715,14 +662,10 @@ with st.sidebar:
         
         st.markdown("---")
         
-        # Check for incoming calls
-        check_incoming_calls()
-        
-        # Show call status
-        if st.session_state.call_status == "ringing":
-            st.warning("📞 Incoming call!")
-        elif st.session_state.call_status == "active":
-            st.success("📞 Call in progress")
+        # Check for pending video calls
+        pending_calls = get_pending_calls(st.session_state.user[0])
+        if pending_calls:
+            st.warning(f"📞 {len(pending_calls)} pending video call(s)")
         
         nav_col1, nav_col2 = st.columns(2)
         with nav_col1:
@@ -739,13 +682,16 @@ with st.sidebar:
         if st.button("🌐 Discover People", use_container_width=True):
             st.session_state.page = "Discover"
         
+        if st.session_state.active_meeting:
+            if st.button("🎥 Active Meeting", use_container_width=True):
+                st.session_state.page = "VideoCall"
+        
         st.markdown("---")
         
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.user = None
             st.session_state.page = "Feed"
-            st.session_state.current_call = None
-            st.session_state.call_status = "idle"
+            st.session_state.active_meeting = None
             st.rerun()
     else:
         st.info("Please login or sign up to use FeedChat")
@@ -760,7 +706,7 @@ if not st.session_state.user:
         </div>
     """, unsafe_allow_html=True)
     
-    auth_tab1, auth_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
+    auth_tab1, auth极_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
     
     with auth_tab1:
         with st.form("Login"):
@@ -784,7 +730,7 @@ if not st.session_state.user:
             new_username = st.text_input("Choose a username", placeholder="Enter a unique username")
             new_email = st.text_input("Email", placeholder="Enter your email")
             new_password = st.text_input("Choose a password", type="password", placeholder="Create a strong password")
-            confirm_password = st.text_input("Confirm password", type="password", placeholder="Confirm your password")
+            confirm_password = st.text_input("Confirm password", type="password", placeholder极="Confirm your password")
             profile_pic = st.file_uploader("Profile picture (optional)", type=["jpg", "png", "jpeg"])
             bio = st.text_area("Bio (optional)", placeholder="Tell us about yourself...")
             
@@ -804,216 +750,322 @@ if not st.session_state.user:
 else:
     user_id = st.session_state.user[0]
     
-    # Handle incoming calls
-    if st.session_state.call_status == "ringing":
-        active_call = get_active_call(user_id)
-        if active_call:
-            caller_id = active_call[1]
-            caller_info = get_user(caller_id)
-            
-            st.markdown(f"""
-                <div class='video-call-container'>
-                    <h2>📞 Incoming Video Call</h2>
-                    <h3>From: {caller_info[1] if caller_info else 'Unknown'}</h3>
-                    <div class='call-buttons'>
-                        <button class='call-button answer-btn' onclick='window.answerCall()'>Answer</button>
-                        <button class='call-button decline-btn' onclick='window.declineCall()'>Decline</button>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # JavaScript for call handling
-            st.markdown("""
-                <script>
-                function answerCall() {
-                    window.parent.postMessage({type: 'answerCall'}, '*');
-                }
-                function declineCall() {
-                    window.parent.postMessage({type: 'declineCall'}, '*');
-                }
-                </script>
-            """, unsafe_allow_html=True)
-            
-            # Handle JavaScript messages
-            if st.button("Answer Call (Fallback)", key="answer_fallback"):
-                answer_call(st.session_state.current_call)
-            if st.button("Decline Call (Fallback)", key="decline_fallback"):
-                end_call(st.session_state.current_call)
-    
-    # Active call interface
-    elif st.session_state.call_status == "active":
+    # Video Call Page
+    if st.session_state.page == "VideoCall" and st.session_state.active_meeting:
+        st.header("🎥 Video Call")
+        
         st.markdown(f"""
             <div class='video-call-container'>
-                <h2>📞 Video Call in Progress</h2>
-                <p>Room ID: {st.session_state.current_call}</p>
+                <h2>Video Call in Progress</h2>
+                <p>You are in a video call meeting</p>
+                <p><strong>Meeting URL:</strong> {st.session_state.active_meeting}</p>
+                
+                <a href="{st.session_state.active_meeting}" target="_blank" class='jitsi-button'>
+                    🎥 Join Video Call
+                </a>
+                
+                <p>Click the button above to join the video call in a new tab</p>
             </div>
         """, unsafe_allow_html=True)
         
-        # WebRTC Video Stream
-        webrtc_ctx = webrtc_streamer(
-            key="video-call",
-            mode=WebRtcMode.SENDRECV,
-            rtc_configuration=RTC_CONFIG,
-            media_stream_constraints={
-                "video": True,
-                "audio": True
-            },
-            video_processor_factory=VideoProcessor
-        )
+        st.info("""
+        **How to use video calls:**
+        1. Click the "Join Video Call" button
+        2. Allow camera and microphone permissions
+        3. You'll be connected to the video call room
+        4. The other person can join using the same link
+        """)
         
-        if st.button("End Call", use_container_width=True, key="end_call"):
-            end_call(st.session_state.current_call)
+        if st.button("End Call", use_container_width=True):
+            st.session_state.active_meeting = None
+            st.session_state.page = "Messages"
+            st.rerun()
     
-    # Normal app pages when not in a call
-    if st.session_state.call_status == "idle":
-        # Feed Page
-        if st.session_state.page == "Feed":
-            st.header("📱 Your Feed")
+    # Normal app pages
+    elif st.session_state.page == "Feed":
+        st.header("📱 Your Feed")
+        
+        with st.expander("➕ Create New Post", expanded=False):
+            post_content = st.text_area("What's on your mind?", placeholder="Share your thoughts...", height=100)
+            media_type = st.selectbox("Media type", ["None", "Image", "Video"])
+            media_file = st.file_uploader("Upload media", type=["jpg", "png", "jpeg", "mp4", "mov"])
             
-            with st.expander("➕ Create New Post", expanded=False):
-                post_content = st.text_area("What's on your mind?", placeholder="Share your thoughts...", height=100)
-                media_type = st.selectbox("Media type", ["None", "Image", "Video"])
-                media_file = st.file_uploader("Upload media", type=["jpg", "png", "jpeg", "mp4", "mov"])
+            if st.button("Post", use_container_width=True):
+                if post_content or media_file:
+                    media_data = media_file.read() if media_file else None
+                    media_type_val = media_type.lower() if media_file else None
+                    create_post(user_id, post_content, media_type_val, media_data)
+                    st.success("Posted successfully!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.warning("Please add some content or media to your post")
+            
+        posts = get_posts(user_id)
+        if not posts:
+            st.info("✨ No posts yet. Follow some users to see their posts here!")
+        else:
+            for post in posts:
+                with st.container():
+                    st.markdown(f"<div class='post'>", unsafe_allow_html=True)
+                    
+                    col1, col2 = st.columns([1, 20])
+                    with col1:
+                        user_info = get_user(post[1])
+                        if user_info and user_info[3]:
+                            st.image(io.BytesIO(user_info[3]), width=50, output_format="PNG")
+                    with col2:
+                        st.write(f"**{post[2]}** · 🕒 {post[6]}")
+                    
+                    st.write(post[3])
+                    
+                    if post[4] and post[5]:
+                        if post[4] == "image":
+                            st.image(io.BytesIO(post[5]), use_column_width=True)
+                        elif post[4] == "video":
+                            st.video(io.BytesIO(post[5]))
+                    
+                    col1, col2 = st.columns([2, 3])
+                    with col1:
+                        like_text = "❤️ Unlike" if post[8] else "🤍 Like"
+                        if st.button(like_text, key=f"like_{post[0]}"):
+                            like_post(user_id, post[0])
+                            st.rerun()
+                        st.write(f"**{post[7]}** likes")
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Messages Page with Video Call
+    elif st.session_state.page == "Messages":
+        st.header("💬 Messages")
+        
+        # Check for pending calls
+        pending_calls = get_pending_calls(user_id)
+        if pending_calls:
+            st.subheader("📞 Pending Video Calls")
+            for call in pending_calls:
+                call_id, caller_id, meeting_url, created_at = call
+                caller_info = get_user(caller_id)
                 
-                if st.button("Post", use_container_width=True):
-                    if post_content or media_file:
-                        media_data = media_file.read() if media_file else None
-                        media_type_val = media_type.lower() if media_file else None
-                        create_post(user_id, post_content, media_type_val, media_data)
-                        st.success("Posted successfully!")
-                        time.sleep(1)
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col1:
+                    st.write(f"**{caller_info[1]}** invited you to a video call")
+                    st.caption(f"{created_at}")
+                
+                with col2:
+                    if st.button("Join", key=f"join_{call_id}"):
+                        st.session_state.active_meeting = meeting_url
+                        update_call_status(call_id, "accepted")
+                        st.session_state.page = "VideoCall"
                         st.rerun()
-                    else:
-                        st.warning("Please add some content or media to your post")
+                
+                with col3:
+                    if st.button("Decline", key=f"decline_{call_id}"):
+                        update_call_status(call_id, "declined")
+                        st.rerun()
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.subheader("Conversations")
+            conversations = get_conversations(user_id)
             
-            posts = get_posts(user_id)
-            if not posts:
-                st.info("✨ No posts yet. Follow some users to see their posts here!")
-            else:
-                for post in posts:
-                    with st.container():
-                        st.markdown(f"<div class='post'>", unsafe_allow_html=True)
+            for conv in conversations:
+                unread_indicator = f" 🔵 {conv[4]}" if conv[4] > 0 else ""
+                if st.button(f"{conv[1]}{unread_indicator}", key=f"conv_{conv[0]}", use_container_width=True):
+                    st.session_state.current_chat = conv[0]
+                    mark_messages_as_read(conv[0], user_id)
+                    st.session_state.last_message_id = 0
+                    st.rerun()
+            
+            st.subheader("Start New Chat")
+            all_users = get_all_users()
+            for user in all_users:
+                if user[0] != user_id:
+                    if st.button(f"💬 {user[1]}", key=f"new_{user[0]}", use_container_width=True):
+                        st.session_state.current_chat = user[0]
+                        st.session_state.last_message_id = 0
+                        st.rerun()
+        
+        with col2:
+            if st.session_state.current_chat:
+                other_user = get_user(st.session_state.current_chat)
+                if other_user:
+                    chat_header = st.columns([4, 1])
+                    with chat_header[0]:
+                        st.subheader(f"Chat with {other_user[1]}")
+                    with chat_header[1]:
+                        if st.button("📞", help="Start Video Call"):
+                            meeting_url = create_video_call(user_id, st.session_state.current_chat)
+                            if meeting_url:
+                                st.success(f"Video call invitation sent to {other_user[1]}!")
+                                st.info("They will receive a notification to join the call.")
+                    
+                    messages = get_messages(user_id, st.session_state.current_chat)
+                    
+                    if messages:
+                        current_last_id = messages[-1][0] if messages else 0
+                        if current_last_id > st.session_state.last_message_id:
+                            st.session_state.last_message_id = current_last_id
+                    
+                    st.markdown("<div class='message-container'>", unsafe_allow_html=True)
+                    
+                    for msg in messages:
+                        if msg[1] == user_id:
+                            st.markdown(f"<div class='message sent'><b>You:</b> {msg[5]}</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div class='message received'><b>{msg[2]}:</b> {msg[5]}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    with st.form(key="message_form", clear_on_submit=True):
+                        message_col1, message_col2 = st.columns([4, 1])
+                        with message_col1:
+                            new_message = st.text_input("Type a message...", key="msg_input", label_visibility="collapsed")
+                        with message_col2:
+                            submitted = st.form_submit_button("➤", use_container_width=True, help="Send message")
                         
-                        col1, col2 = st.columns([1, 20])
-                        with col1:
-                            user_info = get_user(post[1])
-                            if user_info and user_info[3]:
-                                st.image(io.BytesIO(user_info[3]), width=50, output_format="PNG")
-                        with col2:
-                            st.write(f"**{post[2]}** · 🕒 {post[6]}")
-                        
-                        st.write(post[3])
-                        
-                        if post[4] and post[5]:
-                            if post[4] == "image":
-                                st.image(io.BytesIO(post[5]), use_column_width=True)
-                            elif post[4] == "video":
-                                st.video(io.BytesIO(post[5]))
-                        
-                        col1, col2 = st.columns([2, 3])
-                        with col1:
-                            like_text = "❤️ Unlike" if post[8] else "🤍 Like"
-                            if st.button(like_text, key=f"like_{post[0]}"):
-                                like_post(user_id, post[0])
+                        if submitted and new_message:
+                            if send_message(user_id, st.session_state.current_chat, new_message):
+                                st.session_state.last_message_id = 0
                                 st.rerun()
-                            st.write(f"**{post[7]}** likes")
+                else:
+                    st.error("User not found")
+            else:
+                st.info("👆 Select a conversation or start a new chat from the sidebar")
+    
+    # Notifications Page
+    elif st.session_state.page == "Notifications":
+        st.header("🔔 Notifications")
+        
+        notifications = get_notifications(user_id)
+        if not notifications:
+            st.info("🎉 You're all caught up! No new notifications.")
+        else:
+            for notif in notifications:
+                css_class = "notification unread" if not notif[2] else "notification"
+                st.markdown(f"<div class='{css_class}'>{notif[1]}<br><small>🕒 {notif[3]}</small></div>", 
+                           unsafe_allow_html=True)
+                if not notif[2]:
+                    if st.button("Mark as read", key=f"read_{notif[0]}"):
+                        mark_notification_as_read(notif[0])
+                        st.rerun()
+    
+    # Discover Page
+    elif st.session_state.page == "Discover":
+        st.header("👥 Discover People")
+        
+        st.subheader("Suggested Users")
+        suggested_users = get_suggested_users(user_id)
+        
+        if not suggested_users:
+            st.info("🌟 You're following everyone! Great job being social!")
+        else:
+            for user in suggested_users:
+                user_info = get_user(user[0])
+                if user_info:
+                    with st.container():
+                        st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                        
+                        col1, col2, col3 = st.columns([1, 3, 2])
+                        with col1:
+                            if user_info[3]:
+                                st.image(io.BytesIO(user_info[3]), width=60, output_format="PNG")
+                        with col2:
+                            st.write(f"**{user_info[1]}**")
+                            if user_info[4]:
+                                st.caption(user_info[4])
+                        with col3:
+                            if is_following(user_id, user[0]):
+                                if st.button("Unfollow", key=f"unfollow_{user[0]}"):
+                                    unfollow_user(user_id, user[0])
+                                    st.rerun()
+                            else:
+                                if st.button("Follow", key=f"follow_{user[0]}"):
+                                    follow_user(user_id, user[0])
+                                    st.rerun()
                         
                         st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Profile Page
+    elif st.session_state.page == "Profile":
+        user_info = get_user(user_id)
         
-        # Messages Page with Video Call
-        elif st.session_state.page == "Messages":
-            st.header("💬 Messages")
+        if user_info:
+            st.header(f"👤 {user_info[1]}'s Profile")
             
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                st.subheader("Conversations")
-                conversations = get_conversations(user_id)
+                if user_info[3]:
+                    st.image(io.BytesIO(user_info[3]), width=150, output_format="PNG")
+                else:
+                    st.info("No profile picture")
                 
-                for conv in conversations:
-                    unread_indicator = f" 🔵 {conv[4]}" if conv[4] > 0 else ""
-                    if st.button(f"{conv[1]}{unread_indicator}", key=f"conv_{conv[0]}", use_container_width=True):
-                        st.session_state.current_chat = conv[0]
-                        mark_messages_as_read(conv[0], user_id)
-                        st.session_state.last_message_id = 0
-                        st.rerun()
+                followers = get_followers(user_id)
+                following = get_following(user_id)
                 
-                st.subheader("Start New Chat")
-                all_users = get_all_users()
-                for user in all_users:
-                    if user[0] != user_id:
-                        if st.button(f"💬 {user[1]}", key=f"new_{user[0]}", use_container_width=True):
-                            st.session_state.current_chat = user[0]
-                            st.session_state.last_message_id = 0
-                            st.rerun()
+                st.subheader("Stats")
+                st.metric("Followers", len(followers))
+                st.metric("Following", len(following))
+                
+                if st.button("✏️ Edit Profile", use_container_width=True):
+                    st.session_state.page = "EditProfile"
+                    st.rerun()
             
             with col2:
-                if st.session_state.current_chat:
-                    other_user = get_user(st.session_state.current_chat)
-                    if other_user:
-                        chat_header = st.columns([4, 1])
-                        with chat_header[0]:
-                            st.subheader(f"Chat with {other_user[1]}")
-                        with chat_header[1]:
-                            if st.button("📞", help="Start Video Call"):
-                                room_id = start_video_call(user_id, st.session_state.current_chat)
-                                if room_id:
-                                    st.success(f"Calling {other_user[1]}...")
-                                    st.info("They will receive a notification to answer the call.")
-                        
-                        messages = get_messages(user_id, st.session_state.current_chat)
-                        
-                        if messages:
-                            current_last_id = messages[-1][0] if messages else 0
-                            if current_last_id > st.session_state.last_message_id:
-                                st.session_state.last_message_id = current_last_id
-                        
-                        st.markdown("<div class='message-container'>", unsafe_allow_html=True)
-                        
-                        for msg in messages:
-                            if msg[1] == user_id:
-                                st.markdown(f"<div class='message sent'><b>You:</b> {msg[5]}</div>", unsafe_allow_html=True)
-                            else:
-                                st.markdown(f"<div class='message received'><b>{msg[2]}:</b> {msg[5]}</div>", unsafe_allow_html=True)
-                        
-                        st.markdown("</div>", unsafe_allow_html=True)
-                        
-                        with st.form(key="message_form", clear_on_submit=True):
-                            message_col1, message_col2 = st.columns([4, 1])
-                            with message_col1:
-                                new_message = st.text_input("Type a message...", key="msg_input", label_visibility="collapsed")
-                            with message_col2:
-                                submitted = st.form_submit_button("➤", use_container_width=True, help="Send message")
-                            
-                            if submitted and new_message:
-                                if send_message(user_id, st.session_state.current_chat, new_message):
-                                    st.session_state.last_message_id = 0
-                                    st.rerun()
-                    else:
-                        st.error("User not found")
+                st.write(f"**Bio:** {user_info[4] if user_info[4] else 'No bio yet'}")
+                
+                st.subheader("Your Posts")
+                user_posts = get_posts()
+                user_posts = [p for p in user_posts if p[1] == user_id]
+                
+                if not user_posts:
+                    st.info("📝 You haven't posted anything yet. Share your first post!")
                 else:
-                    st.info("👆 Select a conversation or start a new chat from the sidebar")
+                    for post in user_posts:
+                        with st.container():
+                            st.markdown(f"<div class='post'>", unsafe_allow_html=True)
+                            st.write(f"**{post[2]}** · 🕒 {post[6]}")
+                            st.write(post[3])
+                            
+                            if post[4] and post[5]:
+                                if post[4] == "image":
+                                    st.image(io.BytesIO(post[5]), use_column_width=True)
+                                elif post[4] == "video":
+                                    st.video(io.BytesIO(post[5]))
+                            
+                            st.write(f"❤️ {post[7]} likes")
+                            st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Edit Profile Page
+    elif st.session_state.page == "EditProfile":
+        st.header("✏️ Edit Profile")
         
-        # Other pages (Notifications, Discover, Profile) remain the same
-        # ... [rest of the pages code remains unchanged]
-
-# JavaScript message handling
-components.html("""
-<script>
-window.addEventListener('message', function(event) {
-    if (event.data.type === 'answerCall') {
-        window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'answer'}, '*');
-    } else if (event.data.type === 'declineCall') {
-        window.parent.postMessage({type: 'streamlit:setComponentValue', value: 'decline'}, '*');
-    }
-});
-</script>
-""", height=0)
-
-# Handle call responses
-if st.session_state.call_status == "ringing":
-    if st.button("Answer Call", key="answer_call_btn"):
-        answer_call(st.session_state.current_call)
-    if st.button("Decline Call", key="decline_call_btn"):
-        end_call(st.session_state.current_call)
-
+        user_info = get_user(user_id)
+        
+        if user_info:
+            with st.form("EditProfileForm"):
+                new_username = st.text_input("Username", value=user_info[1])
+                new_email = st.text_input("Email", value=user_info[2])
+                new_bio = st.text_area("Bio", value=user_info[4] if user_info[4] else "", height=100)
+                new_profile_pic = st.file_uploader("Profile Picture", type=["jpg", "png", "jpeg"])
+                
+                if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                    try:
+                        c = conn.cursor()
+                        profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
+                        c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
+                                 (new_username, new_email, new_bio, profile_pic_data, user_id))
+                        conn.commit()
+                        st.success("Profile updated successfully!")
+                        time.sleep(1)
+                        st.session_state.page = "Profile"
+                        st.rerun()
+                    except sqlite3.Error as e:
+                        st.error(f"Error updating profile: {e}")
+                    finally:
+                        try:
+                            c.close()
+                        except:
+                            pass
