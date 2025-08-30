@@ -991,7 +991,7 @@ else:
                             if user_info[3]:  # Profile picture
                                 st.image(io.BytesIO(user_info[3]), width=60, output_format="PNG")
                         with col2:
-                            st.write(f"**{user_info[极1]}**")
+                            st.write(f"**{user_info[1]}**")
                             if user_info[4]:  # Bio
                                 st.caption(user_info[4])
                         with col3:
@@ -1092,4 +1092,5 @@ else:
                             c.close()
                         except:
                             pass
+
 
