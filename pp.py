@@ -338,7 +338,7 @@ def send_message(sender_id, receiver_id, content):
             conn.commit()
         return True
     except sqlite3.Error as e:
-        st.error(f"Database error: {极e}")
+        st.error(f"Database error: {e}")
         return False
     finally:
         try:
@@ -378,7 +378,7 @@ def get_conversations(user_id):
                 (SELECT content FROM messages 
                  WHERE (sender_id = ? AND receiver_id = other_user_id) 
                     OR (sender_id = other_user_id AND receiver_id = ?)
-                 ORDER BY created_at DESC LIMIT 1极) as last_message,
+                 ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT created_at FROM messages 
                  WHERE (sender_id = ? AND receiver_id = other_user_id) 
                     OR (sender_id = other_user_id AND receiver_id = ?)
@@ -451,7 +451,7 @@ def get_followers(user_id):
         """, (user_id,))
         return c.fetchall()
     except sqlite3.Error as e:
-        st.error(ff"Database error: {e}")
+        st.error(f"Database error: {e}")
         return []
     finally:
         try:
