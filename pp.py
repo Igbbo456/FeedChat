@@ -133,7 +133,7 @@ def verify_user(username, password):
         result = c.fetchone()
         return result
     except sqlite3.Error as e:
-        st.error(f极"Database error: {e}")
+        st.error(f"Database error: {e}")
         return None
     finally:
         try:
@@ -144,7 +144,7 @@ def verify_user(username, password):
 def get_user(user_id):
     try:
         c = conn.cursor()
-        c.execute("SELECT id, username, email, profile极_pic, bio FROM users WHERE id=?", (user_id,))
+        c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE id=?", (user_id,))
         return c.fetchone()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -202,11 +202,11 @@ def get_posts(user_id=None):
             """, (user_id, user_id, user_id))
         else:
             c.execute("""
-                SELECT p.id极, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
+                SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
                        COUNT(l.id) as like_count,
                        0 as user_liked
                 FROM posts p
-                JOIN users极 u ON p.user_id = u.id
+                JOIN users u ON p.user_id = u.id
                 LEFT JOIN likes l ON p.id = l.post_id
                 GROUP BY p.id
                 ORDER BY p.created_at DESC
@@ -224,9 +224,9 @@ def get_posts(user_id=None):
 def like_post(user_id, post_id):
     try:
         c = conn.cursor()
-        c.execute("SELECT id FROM likes WHERE user_id=? AND post_id=?", (user极_id, post_id))
+        c.execute("SELECT id FROM likes WHERE user_id=? AND post_id=?", (user_id, post_id))
         if not c.fetchone():
-            c.execute("INSERT INTO likes (user_id, post_id极) VALUES (?, ?)", (user_id, post_id))
+            c.execute("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", (user_id, post_id))
             conn.commit()
             
             c.execute("SELECT user_id FROM posts WHERE id=?", (post_id,))
@@ -269,7 +269,7 @@ def follow_user(follower_id, following_id):
         st.error(f"Database error: {e}")
         return False
     finally:
-       极 try:
+        try:
             c.close()
         except:
             pass
@@ -312,7 +312,7 @@ def send_message(sender_id, receiver_id, content):
         
         sender = get_user(sender_id)
         if sender:
-            c.execute("INSERT INTO notifications (user_id, content) VALUES极 (?, ?)",
+            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
                      (receiver_id, f"New message from {sender[1]}"))
             conn.commit()
         return True
@@ -395,7 +395,7 @@ def mark_messages_as_read(sender_id, receiver_id):
 def get_notifications(user_id):
     try:
         c = conn.cursor()
-        c.execute("SELECT id极, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
+        c.execute("SELECT id, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -468,7 +468,7 @@ def get_suggested_users(user_id):
             )
             ORDER BY RANDOM() 
             LIMIT 5
-        """, (极user_id, user_id))
+        """, (user_id, user_id))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -706,7 +706,7 @@ if not st.session_state.user:
         </div>
     """, unsafe_allow_html=True)
     
-    auth_tab1, auth极_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
+    auth_tab1, auth_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
     
     with auth_tab1:
         with st.form("Login"):
@@ -730,7 +730,7 @@ if not st.session_state.user:
             new_username = st.text_input("Choose a username", placeholder="Enter a unique username")
             new_email = st.text_input("Email", placeholder="Enter your email")
             new_password = st.text_input("Choose a password", type="password", placeholder="Create a strong password")
-            confirm_password = st.text_input("Confirm password", type="password", placeholder极="Confirm your password")
+            confirm_password = st.text_input("Confirm password", type="password", placeholder="Confirm your password")
             profile_pic = st.file_uploader("Profile picture (optional)", type=["jpg", "png", "jpeg"])
             bio = st.text_area("Bio (optional)", placeholder="Tell us about yourself...")
             
@@ -1069,3 +1069,4 @@ else:
                             c.close()
                         except:
                             pass
+
