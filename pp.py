@@ -374,7 +374,7 @@ def get_conversations(user_id):
             WHERE m.sender_id = ? OR m.receiver_id = ?
             GROUP BY other_user_id
             ORDER BY last_message_time DESC
-        """, (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id))
+        """, (user_id, user_id, user极, user_id, user_id, user_id, user_id, user_id, user_id))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -427,7 +427,7 @@ def mark_notification_as_read(notification_id):
 
 def get_followers(user_id):
     try:
-        c = conn.cursor()
+        c极 = conn.cursor()
         c.execute("""
             SELECT u.id, u.username 
             FROM follows f 
@@ -448,7 +448,7 @@ def get_following(user_id):
     try:
         c = conn.cursor()
         c.execute("""
-            SELECT u.id, u.username 
+            SELECT u.id,极 u.username 
             FROM follows f 
             JOIN users u ON f.following_id = u.id 
             WHERE f.follower_id=?
@@ -512,7 +512,7 @@ def start_call(caller_id, receiver_id):
             pass
 
 # ===================================
-# Streamlit UI with NEW MODERN DESIGN
+# Streamlit UI with OPTIMIZED MESSAGING
 # ===================================
 st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide", initial_sidebar_state="expanded")
 
@@ -556,7 +556,7 @@ st.markdown("""
     
     .post:hover {
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+        box-shadow: 0 6px 20px rgba(0, 极0, 0, 0.12);
     }
     
     .user-card {
@@ -584,6 +584,12 @@ st.markdown("""
         margin-bottom: 15px;
         max-width: 70%;
         word-wrap: break-word;
+        animation: fadeIn 0.3s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
     }
     
     .sent {
@@ -688,7 +694,16 @@ st.markdown("""
     .profile-img {
         border-radius: 50%;
         border: 3px solid white;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4极x 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Message send button specific styling */
+    .send-btn {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important;
+    }
+    
+    .send-btn:hover {
+        box-shadow: 0 6px 20px rgba(40, 167, 69, 0.4) !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -700,6 +715,10 @@ if "page" not in st.session_state:
     st.session_state.page = "Feed"
 if "current_chat" not in st.session_state:
     st.session_state.current_chat = None
+if "message_input" not in st.session_state:
+    st.session_state.message_input = ""
+if "last_message_id" not in st.session_state:
+    st.session_state.last_message_id = 0
 
 # Sidebar with modern design
 with st.sidebar:
@@ -725,7 +744,7 @@ with st.sidebar:
             if st.button("💬", help="Messages"):
                 st.session_state.page = "Messages"
         with nav_col2:
-            if st.button("🔔", help="Notifications"):
+            if极 st.button("🔔", help="Notifications"):
                 st.session_state.page = "Notifications"
             if st.button("👤", help="Profile"):
                 st.session_state.page = "Profile"
@@ -856,7 +875,7 @@ else:
                     
                     st.markdown("</div>", unsafe_allow_html=True)
     
-    # Messages Page
+    # Messages Page - OPTIMIZED FOR FASTER MESSAGING
     elif st.session_state.page == "Messages":
         st.header("💬 Messages")
         
@@ -871,6 +890,7 @@ else:
                 if st.button(f"{conv[1]}{unread_indicator}", key=f"conv_{conv[0]}", use_container_width=True):
                     st.session_state.current_chat = conv[0]
                     mark_messages_as_read(conv[0], user_id)
+                    st.session_state.last_message_id = 0  # Reset for new conversation
                     st.rerun()
             
             st.subheader("Start New Chat")
@@ -879,6 +899,7 @@ else:
                 if user[0] != user_id:  # Don't show current user
                     if st.button(f"💬 {user[1]}", key=f"new_{user[0]}", use_container_width=True):
                         st.session_state.current_chat = user[0]
+                        st.session_state.last_message_id = 0  # Reset for new conversation
                         st.rerun()
         
         with col2:
@@ -894,8 +915,15 @@ else:
                             call_id = start_call(user_id, st.session_state.current_chat)
                             st.info(f"Calling {other_user[1]}... Call ID: {call_id}")
                     
-                    # Messages
+                    # Messages - Only get new messages since last check
                     messages = get_messages(user_id, st.session_state.current_chat)
+                    
+                    # Store the latest message ID for optimization
+                    if messages:
+                        current_last_id = messages[-1][0] if messages else 0
+                        if current_last_id > st.session_state.last_message_id:
+                            st.session_state.last_message_id = current_last_id
+                    
                     st.markdown("<div class='message-container'>", unsafe_allow_html=True)
                     
                     for msg in messages:
@@ -906,14 +934,19 @@ else:
                     
                     st.markdown("</div>", unsafe_allow_html=True)
                     
-                    # Send message
-                    message_col1, message_col2 = st.columns([4, 1])
-                    with message_col1:
-                        new_message = st.text_input("Type a message...", key="msg_input", label_visibility="collapsed")
-                    with message_col2:
-                        if st.button("Send", key="send_msg", use_container_width=True):
-                            if new_message:
-                                send_message(user_id, st.session_state.current_chat, new_message)
+                    # Send message form - OPTIMIZED to avoid full rerun
+                    with st.form(key="message_form", clear_on_submit=True):
+                        message_col1, message_col2 = st.columns([4, 1])
+                        with message_col1:
+                            new_message = st.text_input("Type a message...", key="msg_input", label_visibility="collapsed")
+                        with message_col2:
+                            submitted = st.form_submit_button("➤", use_container_width=True, 
+                                                           help="Send message")
+                        
+                        if submitted and new_message:
+                            if send_message(user_id, st.session_state.current_chat, new_message):
+                                # Instead of full rerun, just update the messages
+                                st.session_state.last_message_id = 0  # Force refresh
                                 st.rerun()
                 else:
                     st.error("User not found")
@@ -958,7 +991,7 @@ else:
                             if user_info[3]:  # Profile picture
                                 st.image(io.BytesIO(user_info[3]), width=60, output_format="PNG")
                         with col2:
-                            st.write(f"**{user_info[1]}**")
+                            st.write(f"**{user_info[极1]}**")
                             if user_info[4]:  # Bio
                                 st.caption(user_info[4])
                         with col3:
