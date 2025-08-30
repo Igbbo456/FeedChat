@@ -37,7 +37,7 @@ def init_db():
         content TEXT,
         media_type TEXT,
         media_data BLOB,
-        created_at DAT极IME DEFAULT CURRENT_TIMESTAMP
+        created_at DATIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
@@ -161,7 +161,7 @@ def get_user(user_id):
 def get_all_users():
     try:
         c = conn.cursor()
-        c.execute("SELECT id极, username FROM users")
+        c.execute("SELECT id, username FROM users")
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -195,7 +195,7 @@ def get_posts(user_id=None):
             c.execute("""
                 SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
                        COUNT(l.id) as like_count,
-                       SUM(CASE WHEN l.user_id = ? THEN 极1 ELSE 0 END) as user_liked
+                       SUM(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as user_liked
                 FROM posts p
                 JOIN users u ON p.user_id = u.id
                 LEFT JOIN likes l ON p.id = l.post_id
@@ -237,7 +237,7 @@ def like_post(user_id, post_id):
             if post_owner_result:
                 post_owner = post_owner_result[0]
                 
-                user =极 get_user(user_id)
+                user = get_user(user_id)
                 if user:
                     c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
                              (post_owner, f"{user[1]} liked your post"))
@@ -256,7 +256,7 @@ def like_post(user_id, post_id):
 def follow_user(follower_id, following_id):
     try:
         c = conn.cursor()
-        c极.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
+        c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         if not c.fetchone():
             c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
             conn.commit()
@@ -310,12 +310,12 @@ def send_message(sender_id, receiver_id, content):
     try:
         c = conn.cursor()
         c.execute("INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
-                 (sender_id, receiver极_id, content))
+                 (sender_id, receiver_id, content))
         conn.commit()
         
         sender = get_user(sender_id)
         if sender:
-            c.execute("INSERT INTO notifications (极user_id, content) VALUES (?, ?)",
+            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
                      (receiver_id, f"New message from {sender[1]}"))
             conn.commit()
         return True
@@ -337,7 +337,7 @@ def get_messages(user1_id, user2_id):
             FROM messages m
             JOIN users u1 ON m.sender_id = u1.id
             JOIN users u2 ON m.receiver_id = u2.id
-            WHERE (m.sender_id=? AND m.receiver_id=?) OR (m.sender极_id=? AND m.receiver_id=?)
+            WHERE (m.sender_id=? AND m.receiver_id=?) OR (m.sender_id=? AND m.receiver_id=?)
             ORDER BY m.created_at ASC
         """, (user1_id, user2_id, user2_id, user1_id))
         return c.fetchall()
@@ -347,7 +347,7 @@ def get_messages(user1_id, user2_id):
     finally:
         try:
             c.close()
-       极 except:
+        except:
             pass
 
 def get_conversations(user_id):
@@ -362,10 +362,10 @@ def get_conversations(user_id):
                     OR (sender_id = other_user_id AND receiver_id = ?)
                  ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT created_at FROM messages 
-                 WHERE (sender_id = ? AND receiver_id = other_user极_id) 
+                 WHERE (sender_id = ? AND receiver_id = other_user_id) 
                     OR (sender_id = other_user_id AND receiver_id = ?)
                  ORDER BY created_at DESC LIMIT 1) as last_message_time,
-                SUM(CASE WHEN m.receiver_id = ? AND m.is_read = 0 THEN 1 ELSE 0 END) as un极read_count
+                SUM(CASE WHEN m.receiver_id = ? AND m.is_read = 0 THEN 1 ELSE 0 END) as unread_count
             FROM messages m
             JOIN users u ON u.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
             WHERE m.sender_id = ? OR m.receiver_id = ?
@@ -573,7 +573,7 @@ st.markdown("""
         padding: 30px;
         margin: 20px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        backdrop-filter: blur极(10px);
+        backdrop-filter: blur(10px);
         border: 1px solid rgba(255, 255, 255, 0.2);
     }
     
@@ -712,7 +712,7 @@ if not st.session_state.user:
     # Auth pages
     st.markdown("""
         <div style='text-align: center; margin-bottom: 30px;'>
-            <h1 style='极color: white;'>Welcome to FeedChat</h1>
+            <h1 style='color: white;'>Welcome to FeedChat</h1>
             <p style='color: rgba(255, 255, 255, 0.8);'>Connect with friends and share your moments</p>
         </div>
     """, unsafe_allow_html=True)
@@ -740,7 +740,7 @@ if not st.session_state.user:
             st.subheader("Join FeedChat Today!")
             new_username = st.text_input("Choose a username", placeholder="Enter a unique username")
             new_email = st.text_input("Email", placeholder="Enter your email")
-            new_password = st.text极_input("Choose a password", type="password", placeholder="Create a strong password")
+            new_password = st.text_input("Choose a password", type="password", placeholder="Create a strong password")
             confirm_password = st.text_input("Confirm password", type="password", placeholder="Confirm your password")
             profile_pic = st.file_uploader("Profile picture (optional)", type=["jpg", "png", "jpeg"])
             bio = st.text_area("Bio (optional)", placeholder="Tell us about yourself...")
@@ -752,7 +752,7 @@ if not st.session_state.user:
                     st.error("Please fill in all required fields")
                 else:
                     profile_pic_data = profile_pic.read() if profile_pic else None
-                    if create_user(new_username, new_password, new_email, profile极_pic_data, bio):
+                    if create_user(new_username, new_password, new_email, profile_pic_data, bio):
                         st.success("Account created! Please login.")
                     else:
                         st.error("Username already exists")
@@ -826,11 +826,11 @@ else:
                         if user_info and user_info[3]:
                             st.image(io.BytesIO(user_info[3]), width=50, output_format="PNG")
                     with col2:
-                        st.write(f"**极{post[2]}** · 🕒 {post[6]}")
+                        st.write(f"**{post[2]}** · 🕒 {post[6]}")
                     
                     st.write(post[3])
                     
-                    if post[极4] and post[5]:
+                    if post[4] and post[5]:
                         if post[4] == "image":
                             st.image(io.BytesIO(post[5]), use_column_width=True)
                         elif post[4] == "video":
@@ -927,7 +927,7 @@ else:
                         else:
                             st.markdown(f"<div class='message received'><b>{msg[2]}:</b> {msg[5]}</div>", unsafe_allow_html=True)
                     
-                    st.markdown("</极div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
                     
                     with st.form(key="message_form", clear_on_submit=True):
                         message_col1, message_col2 = st.columns([4, 1])
@@ -978,7 +978,7 @@ else:
                     with st.container():
                         st.markdown("<div class='user-card'>", unsafe_allow_html=True)
                         
-                        col1, col2, col3 = st.columns([1, 3极, 2])
+                        col1, col2, col3 = st.columns([1, 3, 2])
                         with col1:
                             if user_info[3]:
                                 st.image(io.BytesIO(user_info[3]), width=60, output_format="PNG")
@@ -1009,7 +1009,7 @@ else:
             
             with col1:
                 if user_info[3]:
-                    st.image(io.BytesIO(user_info极[3]), width=150, output_format="PNG")
+                    st.image(io.BytesIO(user_info[3]), width=150, output_format="PNG")
                 else:
                     st.info("No profile picture")
                 
@@ -1080,3 +1080,4 @@ else:
                             c.close()
                         except:
                             pass
+
