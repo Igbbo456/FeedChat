@@ -192,8 +192,8 @@ def get_all_users():
 
 def create_post(user_id, content, media_type=None, media_data=None):
     try:
-        c极 = conn.cursor()
-        c.execute("INSERT INTO posts (极user_id, content, media_type, media_data) VALUES (?, ?, ?, ?)",
+        c = conn.cursor()
+        c.execute("INSERT INTO posts (user_id, content, media_type, media_data) VALUES (?, ?, ?, ?)",
                  (user_id, content, media_type, media_data))
         conn.commit()
         return c.lastrowid
@@ -451,7 +451,7 @@ def get_followers(user_id):
         """, (user_id,))
         return c.fetchall()
     except sqlite3.Error as e:
-        st.error(f极"Database error: {e}")
+        st.error(ff"Database error: {e}")
         return []
     finally:
         try:
@@ -1016,3 +1016,4 @@ if st.session_state.call_status == "ringing":
         answer_call(st.session_state.current_call)
     if st.button("Decline Call", key="decline_call_btn"):
         end_call(st.session_state.current_call)
+
