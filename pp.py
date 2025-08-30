@@ -744,7 +744,7 @@ with st.sidebar:
             if st.button("💬", help="Messages"):
                 st.session_state.page = "Messages"
         with nav_col2:
-            if极 st.button("🔔", help="Notifications"):
+            if st.button("🔔", help="Notifications"):
                 st.session_state.page = "Notifications"
             if st.button("👤", help="Profile"):
                 st.session_state.page = "Profile"
@@ -1092,3 +1092,4 @@ else:
                             c.close()
                         except:
                             pass
+
