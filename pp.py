@@ -101,7 +101,7 @@ def init_db():
 conn = init_db()
 
 # ===================================
-# Helper Functions
+# Helper Functions (same as before)
 # ===================================
 def create_user(username, password, email, profile_pic=None, bio=""):
     try:
@@ -512,54 +512,183 @@ def start_call(caller_id, receiver_id):
             pass
 
 # ===================================
-# Streamlit UI
+# Streamlit UI with NEW MODERN DESIGN
 # ===================================
-st.set_page_config(page_title="FeedChat", page_icon="📱", layout="wide")
+st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide", initial_sidebar_state="expanded")
 
-# Custom CSS
+# Modern CSS with gradient background and glassmorphism effect
 st.markdown("""
     <style>
+    /* Main background gradient */
+    .stApp {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background-attachment: fixed;
+    }
+    
+    /* Sidebar styling */
+    .css-1d391kg {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-right: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    /* Main content area */
+    .main .block-container {
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 20px;
+        padding: 30px;
+        margin: 20px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    /* Cards and containers */
     .post {
-        background-color: #f8f9fa;
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        padding: 25px;
+        border-radius: 15px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        transition: transform 0.2s ease;
     }
+    
+    .post:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+    }
+    
     .user-card {
-        background-color: #ffffff;
-        padding: 15px;
-        border-radius: 10px;
-        margin-bottom: 10px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        padding: 20px;
+        border-radius: 15px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.3);
     }
+    
+    /* Message styling */
     .message-container {
-        max-height: 400px;
+        max-height: 500px;
         overflow-y: auto;
-        padding: 10px;
+        padding: 20px;
+        background: rgba(248, 249, 250, 0.8);
+        border-radius: 15px;
+        margin-bottom: 20px;
     }
+    
     .message {
-        padding: 10px;
-        border-radius: 10px;
-        margin-bottom: 10px;
+        padding: 15px;
+        border-radius: 18px;
+        margin-bottom: 15px;
+        max-width: 70%;
+        word-wrap: break-word;
     }
+    
     .sent {
-        background-color: #dcf8c6;
-        margin-left: 20%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        margin-left: auto;
+        margin-right: 0;
+        border-bottom-right-radius: 5px;
     }
+    
     .received {
-        background-color: #ffffff;
-        margin-right: 20%;
+        background: linear-gradient(135deg, #e6e9f0 0%, #eef1f5 100%);
+        color: #333;
+        margin-right: auto;
+        margin-left: 0;
+        border-bottom-left-radius: 5px;
     }
+    
+    /* Notification styling */
     .notification {
-        background-color: #e3f2fd;
-        padding: 10px;
-        border-radius: 5px;
-        margin-bottom: 5px;
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        padding: 15px;
+        border-radius: 12px;
+        margin-bottom: 10px;
+        border-left: 4px solid #ffc107;
     }
+    
     .unread {
-        background-color: #bbdefb;
-        font-weight: bold;
+        background: linear-gradient(135deg, #cce5ff 0%, #b8daff 100%);
+        border-left: 4px solid #007bff;
+        font-weight: 600;
+    }
+    
+    /* Button styling */
+    .stButton>button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 10px 20px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Input fields */
+    .stTextInput>div>div>input {
+        border-radius: 25px;
+        border: 2px solid #e9ecef;
+        padding: 12px 20px;
+    }
+    
+    .stTextArea>div>div>textarea {
+        border-radius: 15px;
+        border: 2px solid #e9ecef;
+        padding: 15px;
+    }
+    
+    /* Header styling */
+    h1, h2, h3 {
+        color: #2c3e50;
+        font-weight: 700;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 15px 15px 0 0;
+        padding: 10px 20px;
+        font-weight: 600;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+    }
+    
+    /* Profile image styling */
+    .profile-img {
+        border-radius: 50%;
+        border: 3px solid white;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -572,44 +701,65 @@ if "page" not in st.session_state:
 if "current_chat" not in st.session_state:
     st.session_state.current_chat = None
 
-# Sidebar
+# Sidebar with modern design
 with st.sidebar:
-    st.title("📱 FeedChat")
+    st.markdown("""
+        <div style='text-align: center; padding: 20px 0;'>
+            <h1 style='color: white; margin-bottom: 30px;'>💬 FeedChat</h1>
+        </div>
+    """, unsafe_allow_html=True)
     
     if st.session_state.user:
         user_info = get_user(st.session_state.user[0])
         if user_info and user_info[3]:  # Profile picture
-            st.image(io.BytesIO(user_info[3]), width=100)
-        st.success(f"Welcome, {user_info[1]}!" if user_info else "Welcome!")
+            st.image(io.BytesIO(user_info[3]), width=80, output_format="PNG", use_column_width=True)
+        st.success(f"**Welcome, {user_info[1]}!**" if user_info else "**Welcome!**")
         
-        # Navigation
-        if st.button("🏠 Feed"):
-            st.session_state.page = "Feed"
-        if st.button("💬 Messages"):
-            st.session_state.page = "Messages"
-        if st.button("🔔 Notifications"):
-            st.session_state.page = "Notifications"
-        if st.button("👥 Discover"):
+        st.markdown("---")
+        
+        # Navigation buttons with icons
+        nav_col1, nav_col2 = st.columns(2)
+        with nav_col1:
+            if st.button("🏠", help="Feed"):
+                st.session_state.page = "Feed"
+            if st.button("💬", help="Messages"):
+                st.session_state.page = "Messages"
+        with nav_col2:
+            if st.button("🔔", help="Notifications"):
+                st.session_state.page = "Notifications"
+            if st.button("👤", help="Profile"):
+                st.session_state.page = "Profile"
+        
+        if st.button("🌐 Discover People", use_container_width=True):
             st.session_state.page = "Discover"
-        if st.button("👤 Profile"):
-            st.session_state.page = "Profile"
         
-        if st.button("🚪 Logout"):
+        st.markdown("---")
+        
+        if st.button("🚪 Logout", use_container_width=True):
             st.session_state.user = None
             st.session_state.page = "Feed"
             st.rerun()
     else:
         st.info("Please login or sign up to use FeedChat")
 
-# Authentication
+# Main content area with modern background
 if not st.session_state.user:
-    auth_tab1, auth_tab2 = st.tabs(["Login", "Sign Up"])
+    # Auth pages with modern design
+    st.markdown("""
+        <div style='text-align: center; margin-bottom: 30px;'>
+            <h1 style='color: white;'>Welcome to FeedChat</h1>
+            <p style='color: rgba(255, 255, 255, 0.8);'>Connect with friends and share your moments</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    auth_tab1, auth_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
     
     with auth_tab1:
         with st.form("Login"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            if st.form_submit_button("Login"):
+            st.subheader("Welcome Back!")
+            username = st.text_input("Username", placeholder="Enter your username")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            if st.form_submit_button("Login", use_container_width=True):
                 if username and password:
                     user = verify_user(username, password)
                     if user:
@@ -622,14 +772,15 @@ if not st.session_state.user:
     
     with auth_tab2:
         with st.form("Sign Up"):
-            new_username = st.text_input("Choose a username")
-            new_email = st.text_input("Email")
-            new_password = st.text_input("Choose a password", type="password")
-            confirm_password = st.text_input("Confirm password", type="password")
+            st.subheader("Join FeedChat Today!")
+            new_username = st.text_input("Choose a username", placeholder="Enter a unique username")
+            new_email = st.text_input("Email", placeholder="Enter your email")
+            new_password = st.text_input("Choose a password", type="password", placeholder="Create a strong password")
+            confirm_password = st.text_input("Confirm password", type="password", placeholder="Confirm your password")
             profile_pic = st.file_uploader("Profile picture (optional)", type=["jpg", "png", "jpeg"])
-            bio = st.text_area("Bio (optional)")
+            bio = st.text_area("Bio (optional)", placeholder="Tell us about yourself...")
             
-            if st.form_submit_button("Create Account"):
+            if st.form_submit_button("Create Account", use_container_width=True):
                 if new_password != confirm_password:
                     st.error("Passwords don't match")
                 elif not new_username or not new_email or not new_password:
@@ -647,15 +798,15 @@ else:
     
     # Feed Page
     if st.session_state.page == "Feed":
-        st.header("📱 Feed")
+        st.header("📱 Your Feed")
         
-        # Create post
-        with st.expander("Create a new post"):
-            post_content = st.text_area("What's on your mind?")
+        # Create post card
+        with st.expander("➕ Create New Post", expanded=False):
+            post_content = st.text_area("What's on your mind?", placeholder="Share your thoughts...", height=100)
             media_type = st.selectbox("Media type", ["None", "Image", "Video"])
             media_file = st.file_uploader("Upload media", type=["jpg", "png", "jpeg", "mp4", "mov"])
             
-            if st.button("Post"):
+            if st.button("Post", use_container_width=True):
                 if post_content or media_file:
                     media_data = media_file.read() if media_file else None
                     media_type_val = media_type.lower() if media_file else None
@@ -664,25 +815,25 @@ else:
                     time.sleep(1)
                     st.rerun()
                 else:
-                    st.warning("Post content or media is required")
+                    st.warning("Please add some content or media to your post")
         
         # Display posts
         posts = get_posts(user_id)
         if not posts:
-            st.info("No posts yet. Follow some users to see their posts here.")
+            st.info("✨ No posts yet. Follow some users to see their posts here!")
         else:
             for post in posts:
                 with st.container():
                     st.markdown(f"<div class='post'>", unsafe_allow_html=True)
                     
-                    # User info
+                    # User info with profile picture
                     col1, col2 = st.columns([1, 20])
                     with col1:
                         user_info = get_user(post[1])
                         if user_info and user_info[3]:  # Profile picture
-                            st.image(io.BytesIO(user_info[3]), width=40)
+                            st.image(io.BytesIO(user_info[3]), width=50, output_format="PNG")
                     with col2:
-                        st.write(f"**{post[2]}** · {post[6]}")
+                        st.write(f"**{post[2]}** · 🕒 {post[6]}")
                     
                     # Post content
                     st.write(post[3])
@@ -690,19 +841,18 @@ else:
                     # Media
                     if post[4] and post[5]:
                         if post[4] == "image":
-                            st.image(io.BytesIO(post[5]))
+                            st.image(io.BytesIO(post[5]), use_column_width=True)
                         elif post[4] == "video":
-                            # For video, we would need a proper video player
                             st.video(io.BytesIO(post[5]))
                     
-                    # Like button
-                    col1, col2 = st.columns(2)
+                    # Like button and stats
+                    col1, col2 = st.columns([2, 3])
                     with col1:
                         like_text = "❤️ Unlike" if post[8] else "🤍 Like"
                         if st.button(like_text, key=f"like_{post[0]}"):
                             like_post(user_id, post[0])
                             st.rerun()
-                        st.write(f"{post[7]} likes")
+                        st.write(f"**{post[7]}** likes")
                     
                     st.markdown("</div>", unsafe_allow_html=True)
     
@@ -717,18 +867,17 @@ else:
             conversations = get_conversations(user_id)
             
             for conv in conversations:
-                unread_indicator = f" ({conv[4]})" if conv[4] > 0 else ""
-                if st.button(f"{conv[1]}{unread_indicator}", key=f"conv_{conv[0]}"):
+                unread_indicator = f" 🔵 {conv[4]}" if conv[4] > 0 else ""
+                if st.button(f"{conv[1]}{unread_indicator}", key=f"conv_{conv[0]}", use_container_width=True):
                     st.session_state.current_chat = conv[0]
                     mark_messages_as_read(conv[0], user_id)
                     st.rerun()
             
-            # Start new conversation
             st.subheader("Start New Chat")
             all_users = get_all_users()
             for user in all_users:
                 if user[0] != user_id:  # Don't show current user
-                    if st.button(f"💬 {user[1]}", key=f"new_{user[0]}"):
+                    if st.button(f"💬 {user[1]}", key=f"new_{user[0]}", use_container_width=True):
                         st.session_state.current_chat = user[0]
                         st.rerun()
         
@@ -736,12 +885,14 @@ else:
             if st.session_state.current_chat:
                 other_user = get_user(st.session_state.current_chat)
                 if other_user:
-                    st.subheader(f"Chat with {other_user[1]}")
-                    
-                    # Call button
-                    if st.button("📞 Start Video Call"):
-                        call_id = start_call(user_id, st.session_state.current_chat)
-                        st.info(f"Calling {other_user[1]}... Call ID: {call_id}")
+                    # Chat header with call button
+                    chat_header = st.columns([4, 1])
+                    with chat_header[0]:
+                        st.subheader(f"Chat with {other_user[1]}")
+                    with chat_header[1]:
+                        if st.button("📞", help="Start Video Call"):
+                            call_id = start_call(user_id, st.session_state.current_chat)
+                            st.info(f"Calling {other_user[1]}... Call ID: {call_id}")
                     
                     # Messages
                     messages = get_messages(user_id, st.session_state.current_chat)
@@ -756,15 +907,18 @@ else:
                     st.markdown("</div>", unsafe_allow_html=True)
                     
                     # Send message
-                    new_message = st.text_input("Type a message...", key="msg_input")
-                    if st.button("Send", key="send_msg"):
-                        if new_message:
-                            send_message(user_id, st.session_state.current_chat, new_message)
-                            st.rerun()
+                    message_col1, message_col2 = st.columns([4, 1])
+                    with message_col1:
+                        new_message = st.text_input("Type a message...", key="msg_input", label_visibility="collapsed")
+                    with message_col2:
+                        if st.button("Send", key="send_msg", use_container_width=True):
+                            if new_message:
+                                send_message(user_id, st.session_state.current_chat, new_message)
+                                st.rerun()
                 else:
                     st.error("User not found")
             else:
-                st.info("Select a conversation or start a new chat")
+                st.info("👆 Select a conversation or start a new chat from the sidebar")
     
     # Notifications Page
     elif st.session_state.page == "Notifications":
@@ -772,11 +926,11 @@ else:
         
         notifications = get_notifications(user_id)
         if not notifications:
-            st.info("No notifications yet")
+            st.info("🎉 You're all caught up! No new notifications.")
         else:
             for notif in notifications:
                 css_class = "notification unread" if not notif[2] else "notification"
-                st.markdown(f"<div class='{css_class}'>{notif[1]}<br><small>{notif[3]}</small></div>", 
+                st.markdown(f"<div class='{css_class}'>{notif[1]}<br><small>🕒 {notif[3]}</small></div>", 
                            unsafe_allow_html=True)
                 if not notif[2]:
                     if st.button("Mark as read", key=f"read_{notif[0]}"):
@@ -790,31 +944,34 @@ else:
         st.subheader("Suggested Users")
         suggested_users = get_suggested_users(user_id)
         
-        for user in suggested_users:
-            user_info = get_user(user[0])
-            if user_info:
-                with st.container():
-                    st.markdown("<div class='user-card'>", unsafe_allow_html=True)
-                    
-                    col1, col2, col3 = st.columns([1, 3, 2])
-                    with col1:
-                        if user_info[3]:  # Profile picture
-                            st.image(io.BytesIO(user_info[3]), width=50)
-                    with col2:
-                        st.write(f"**{user_info[1]}**")
-                        if user_info[4]:  # Bio
-                            st.caption(user_info[4])
-                    with col3:
-                        if is_following(user_id, user[0]):
-                            if st.button("Unfollow", key=f"unfollow_{user[0]}"):
-                                unfollow_user(user_id, user[0])
-                                st.rerun()
-                        else:
-                            if st.button("Follow", key=f"follow_{user[0]}"):
-                                follow_user(user_id, user[0])
-                                st.rerun()
-                    
-                    st.markdown("</div>", unsafe_allow_html=True)
+        if not suggested_users:
+            st.info("🌟 You're following everyone! Great job being social!")
+        else:
+            for user in suggested_users:
+                user_info = get_user(user[0])
+                if user_info:
+                    with st.container():
+                        st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                        
+                        col1, col2, col3 = st.columns([1, 3, 2])
+                        with col1:
+                            if user_info[3]:  # Profile picture
+                                st.image(io.BytesIO(user_info[3]), width=60, output_format="PNG")
+                        with col2:
+                            st.write(f"**{user_info[1]}**")
+                            if user_info[4]:  # Bio
+                                st.caption(user_info[4])
+                        with col3:
+                            if is_following(user_id, user[0]):
+                                if st.button("Unfollow", key=f"unfollow_{user[0]}"):
+                                    unfollow_user(user_id, user[0])
+                                    st.rerun()
+                            else:
+                                if st.button("Follow", key=f"follow_{user[0]}"):
+                                    follow_user(user_id, user[0])
+                                    st.rerun()
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
     
     # Profile Page
     elif st.session_state.page == "Profile":
@@ -827,7 +984,7 @@ else:
             
             with col1:
                 if user_info[3]:  # Profile picture
-                    st.image(io.BytesIO(user_info[3]), width=150)
+                    st.image(io.BytesIO(user_info[3]), width=150, output_format="PNG")
                 else:
                     st.info("No profile picture")
                 
@@ -836,11 +993,11 @@ else:
                 following = get_following(user_id)
                 
                 st.subheader("Stats")
-                st.write(f"**{len(followers)}** Followers")
-                st.write(f"**{len(following)}** Following")
+                st.metric("Followers", len(followers))
+                st.metric("Following", len(following))
                 
                 # Edit profile
-                if st.button("Edit Profile"):
+                if st.button("✏️ Edit Profile", use_container_width=True):
                     st.session_state.page = "EditProfile"
                     st.rerun()
             
@@ -853,17 +1010,17 @@ else:
                 user_posts = [p for p in user_posts if p[1] == user_id]
                 
                 if not user_posts:
-                    st.info("You haven't posted anything yet")
+                    st.info("📝 You haven't posted anything yet. Share your first post!")
                 else:
                     for post in user_posts:
                         with st.container():
                             st.markdown(f"<div class='post'>", unsafe_allow_html=True)
-                            st.write(f"**{post[2]}** · {post[6]}")
+                            st.write(f"**{post[2]}** · 🕒 {post[6]}")
                             st.write(post[3])
                             
                             if post[4] and post[5]:
                                 if post[4] == "image":
-                                    st.image(io.BytesIO(post[5]), width=300)
+                                    st.image(io.BytesIO(post[5]), use_column_width=True)
                                 elif post[4] == "video":
                                     st.video(io.BytesIO(post[5]))
                             
@@ -880,10 +1037,10 @@ else:
             with st.form("EditProfileForm"):
                 new_username = st.text_input("Username", value=user_info[1])
                 new_email = st.text_input("Email", value=user_info[2])
-                new_bio = st.text_area("Bio", value=user_info[4] if user_info[4] else "")
+                new_bio = st.text_area("Bio", value=user_info[4] if user_info[4] else "", height=100)
                 new_profile_pic = st.file_uploader("Profile Picture", type=["jpg", "png", "jpeg"])
                 
-                if st.form_submit_button("Save Changes"):
+                if st.form_submit_button("💾 Save Changes", use_container_width=True):
                     # Update user in database
                     try:
                         c = conn.cursor()
