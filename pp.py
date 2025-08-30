@@ -374,7 +374,7 @@ def get_conversations(user_id):
             WHERE m.sender_id = ? OR m.receiver_id = ?
             GROUP BY other_user_id
             ORDER BY last_message_time DESC
-        """, (user_id, user_id, user极, user_id, user_id, user_id, user_id, user_id, user_id))
+        """, (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -1092,5 +1092,6 @@ else:
                             c.close()
                         except:
                             pass
+
 
 
