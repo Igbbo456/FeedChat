@@ -59,7 +59,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         follower_id INTEGER,
         following_id INTEGER,
-        created_at DAT极IME DEFAULT CURRENT_TIMESTAMP
+        created_at DATIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
@@ -78,7 +78,7 @@ def init_db():
     # Calls table
     c.execute("""
     CREATE TABLE IF NOT EXISTS calls (
-        id INTEGER PRIMARY极 KEY AUTOINCREMENT,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         caller_id INTEGER,
         receiver_id INTEGER,
         meeting_url TEXT,
@@ -284,11 +284,11 @@ def create_post(user_id, content, media_type=None, media_data=None):
     try:
         c = conn.cursor()
         c.execute("INSERT INTO posts (user_id, content, media_type, media_data) VALUES (?, ?, ?, ?)",
-                 (user_id极, content, media_type, media_data))
+                 (user_id, content, media_type, media_data))
         conn.commit()
         return c.lastrowid
     except sqlite3.Error as e:
-        st.error(f极"Database error: {e}")
+        st.error(f"Database error: {e}")
         return None
     finally:
         try:
@@ -422,7 +422,7 @@ def follow_user(follower_id, following_id):
 def unfollow_user(follower_id, following_id):
     try:
         c = conn.cursor()
-        c.execute("DELETE FROM follows WHERE follower极_id=? AND following_id=?", (follower_id, following_id))
+        c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         conn.commit()
         return c.rowcount > 0
     except sqlite3.Error as e:
@@ -430,7 +430,7 @@ def unfollow_user(follower_id, following_id):
         return False
     finally:
         try:
-极          c.close()
+          c.close()
         except:
             pass
 
@@ -982,3 +982,4 @@ else:
                             st.markdown("</div>", unsafe_allow_html=True)
 
 # ... [rest of the code remains the same for other pages]
+
