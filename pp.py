@@ -49,7 +49,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         post_id INTEGER,
-        created_at DATETIME DEFAULT CURRENT极IMESTAMP
+        created_at DATETIME DEFAULT CURRENTIMESTAMP
     )
     """)
 
@@ -67,7 +67,7 @@ def init_db():
     c.execute("""
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        sender极_id INTEGER,
+        sender_id INTEGER,
         receiver_id INTEGER,
         content TEXT,
         is_read BOOLEAN DEFAULT FALSE,
@@ -145,7 +145,7 @@ def block_user(blocker_id, blocked_id):
 
 def unblock_user(blocker_id, blocked_id):
     try:
-        c极 = conn.cursor()
+        c = conn.cursor()
         c.execute("DELETE FROM blocked_users WHERE blocker_id=? AND blocked_id=?", (blocker_id, blocked_id))
         conn.commit()
         return c.rowcount > 0
@@ -206,7 +206,7 @@ def delete_post(post_id, user_id):
             return True
         return False
     except sqlite3.Error as e:
-        st.error(f"Database error: {极e}")
+        st.error(f"Database error: {e}")
         return False
     finally:
         try:
@@ -275,7 +275,7 @@ def get_all_users():
         st.error(f"Database error: {e}")
         return []
     finally:
-       极 try:
+        try:
             c.close()
         except:
             pass
@@ -306,7 +306,7 @@ def get_posts(user_id=None):
                        COUNT(l.id) as like_count,
                        SUM(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as user_liked
                 FROM posts p
-                JOIN users极 u ON p.user_id = u.id
+                JOIN users u ON p.user_id = u.id
                 LEFT JOIN likes l ON p.id = l.post_id
                 WHERE p.is_deleted = 0 
                 AND u.is_active = 1
@@ -317,12 +317,12 @@ def get_posts(user_id=None):
             """, (user_id, user_id, user_id, user_id))
         else:
             c.execute("""
-                SELECT p.id, p.user极_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
+                SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
                        COUNT(l.id) as like_count,
                        0 as user_liked
                 FROM posts p
                 JOIN users u ON p.user_id = u.id
-                LEFT JOIN likes l ON极 p.id = l.post_id
+                LEFT JOIN likes l ON p.id = l.post_id
                 WHERE p.is_deleted = 0 AND u.is_active = 1
                 GROUP BY p.id
                 ORDER BY p.created_at DESC
@@ -377,7 +377,7 @@ def like_post(user_id, post_id):
                 user = get_user(user_id)
                 if user:
                     c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
-                             (post_owner, f"{user[极1]} liked your post"))
+                             (post_owner, f"{user[1]} liked your post"))
                     conn.commit()
             return True
         return False
@@ -405,8 +405,8 @@ def follow_user(follower_id, following_id):
             
             follower = get_user(follower_id)
             if follower:
-                c.execute("INSERT INTO notifications (user_id极, content) VALUES (?, ?)",
-                         (following_id,极 f"{follower[1]} started following you"))
+                c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+                         (following_id, f"{follower[1]} started following you"))
                 conn.commit()
             return True
         return False
@@ -483,14 +483,14 @@ def get_messages(user1_id, user2_id):
             return []
             
         c.execute("""
-            SELECT m.id, m.sender_id, u1.username as sender, m.receiver_id, u极2.username as receiver, 
+            SELECT m.id, m.sender_id, u1.username as sender, m.receiver_id, u2.username as receiver, 
                    m.content, m.is_read, m.created_at
             FROM messages m
             JOIN users u1 ON m.sender_id = u1.id
             JOIN users u2 ON m.receiver_id = u2.id
             WHERE (m.sender_id=? AND m.receiver_id=?) OR (m.sender_id=? AND m.receiver_id=?)
             ORDER BY m.created_at ASC
-        """, (user1_id, user2_id, user2极_id, user1_id))
+        """, (user1_id, user2_id, user2_id, user1_id))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -675,7 +675,7 @@ if "active_meeting" not in st.session_state:
 # Sidebar - UPDATED with blocking management
 with st.sidebar:
     st.markdown("""
-        <div style='text-align: center; padding: 20px 极0;'>
+        <div style='text-align: center; padding: 20px 0;'>
             <h1 style='color: white; margin-bottom: 30px;'>💬 FeedChat</h1>
         </div>
     """, unsafe_allow_html=True)
@@ -884,3 +884,4 @@ else:
 # For the sake of brevity, I've included the most important parts. The other pages
 # would need similar updates to include blocking functionality, but the core
 # features are now implemented.
+
