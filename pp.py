@@ -806,7 +806,7 @@ if not st.session_state.user:
                     st.error("Please fill in all required fields")
                 else:
                     profile_pic_data = profile_pic.read() if profile_pic else None
-                    if create_user(new_username, new_password, new_email, profile_pic_data极, bio):
+                    if create_user(new_username, new_password, new_email, profile_pic_data, bio):
                         st.success("Account created! Please login.")
                     else:
                         st.error("Username already exists")
@@ -917,4 +917,5 @@ else:
 
 # For the sake of brevity, I've focused on the core functionality
 # The other pages would follow similar patterns with proper error handling
+
 
