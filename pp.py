@@ -592,6 +592,84 @@ def get_conversations(user_id):
         except:
             pass
 
+def mark_messages_as_read(sender_id, receiver_id):
+    try:
+        c = conn.cursor()
+        c.execute("UPDATE messages SET is_read=1 WHERE sender_id=? AND receiver_id=?", (sender_id, receiver_id))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+    finally:
+        try:
+            c.close()
+        except:
+            pass
+
+def get_notifications(user_id):
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id极, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created极_at DESC", (user_id,))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
+
+def mark_notification_as_read(notification_id):
+    try:
+        c = conn.cursor()
+        c.execute("UPDATE notifications SET is_read=1 WHERE id=?", (notification_id,))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+    finally:
+        try:
+            c.close()
+        except:
+            pass
+
+def get_followers(user_id):
+    try:
+        c极 = conn.cursor()
+        c.execute("""
+            SELECT u.id, u.username 
+            FROM follows f 
+            JOIN users u ON f.follower_id = u.id 
+            WHERE f.following_id=?
+        """, (user_id,))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
+
+def get_following(user_id):
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT u.id, u.username 
+            FROM follows f 
+            JOIN users u ON f.following_id = u.id 
+            WHERE f.follower_id=?
+        """, (user_id,))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except:
+            pass
+
 def get_suggested_users(user_id):
     try:
         c = conn.cursor()
@@ -599,7 +677,6 @@ def get_suggested_users(user_id):
             SELECT id, username 
             FROM users 
             WHERE id != ? 
-            AND is_active = 1
             AND id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id=?)
             AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
             ORDER BY RANDOM() 
@@ -628,7 +705,7 @@ def create_video_call(caller_id, receiver_id):
         meeting_url = f"https://meet.jit.si/{meeting_id}"
         
         # Create call record
-        c.execute("INSERT INTO calls (caller_id, receiver_id, meeting_url, status) VALUES (?, ?, ?, ?)",
+        c.execute("INSERT INTO calls (caller_id, receiver_id, meeting_url, status) VALUES极 (?, ?, ?, ?)",
                  (caller_id, receiver_id, meeting_url, "scheduled"))
         conn.commit()
         
@@ -694,11 +771,52 @@ st.markdown("""
         background-attachment: fixed;
     }
     .blocked-user {
-        background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+        background: linear-gradient(135deg, #ffebee 0%, #极ffcdd2 100%);
         padding: 15px;
         border-radius: 10px;
         margin: 10px 0;
         border-left: 4px solid #f44336;
+    }
+    .post {
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        padding: 25px;
+        border-radius: 15px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    .user-card {
+        background: linear-gradient(135deg, #ffffff 极0%, #f8f9fa 100%);
+        padding: 20px;
+        border-radius: 15px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    .notification {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        border-left: 4px solid #2196f3;
+    }
+    .message-container {
+        max-height: 400px;
+        overflow-y: auto;
+        padding: 10px;
+    }
+    .message {
+        padding: 10px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+    }
+    .sent {
+        background-color: #dcf8c6;
+        margin-left: 20%;
+    }
+    .received {
+        background-color: #ffffff;
+        margin-right: 20%;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -771,7 +889,7 @@ if not st.session_state.user:
         </div>
     """, unsafe_allow_html=True)
     
-    auth_tab1, auth_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
+    auth_tab1, auth极_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
     
     with auth_tab1:
         with st.form("Login"):
@@ -873,7 +991,7 @@ else:
                     col1, col2, col3 = st.columns([1, 3, 1])
                     with col1:
                         user_info = get_user(post[1])
-                        if user_info and user_info[3]:
+                        if user_info and user_info极[3]:
                             st.image(io.BytesIO(user_info[3]), width=50, output_format="PNG")
                     with col2:
                         st.write(f"**{post[2]}** · 🕒 {post[6]}")
@@ -908,14 +1026,244 @@ else:
                     with col3:
                         # Delete button for own posts
                         if post[1] == user_id:
-                            if st.button("🗑️", key=f"delete_{post[0]}", help="Delete Post"):
+                            if st.button("🗑️", key=f"delete_{post[0]}", help极="Delete Post"):
                                 if delete_post(post[0], user_id):
                                     st.success("Post deleted successfully!")
                                     st.rerun()
                     
                     st.markdown("</div>", unsafe_allow_html=True)
-
-# For the sake of brevity, I've focused on the core functionality
-# The other pages would follow similar patterns with proper error handling
-
-
+    
+    # Messages Page
+    elif st.session_state.page == "Messages":
+        st.header("💬 Messages")
+        
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.subheader("Conversations")
+            conversations = get_conversations(user_id)
+            
+            for conv in conversations:
+                unread_indicator = f" 🔵 {conv[4]}" if conv[4] > 0 else ""
+                if st.button(f"{conv[1]}{unread_indicator}", key=f"conv_{conv[0]}", use_container_width=True):
+                    st.session_state.current_chat = conv[0]
+                    mark_messages_as_read(conv[0], user_id)
+                    st.session_state.last_message_id = 0
+                    st.rerun()
+            
+            st.subheader("Start New Chat")
+            all_users = get_all_users()
+            for user in all_users:
+                if user[0] != user_id and not is_blocked(user_id, user[0]):
+                    if st.button(f"💬 {user[1]}", key=f"new_{user[0]}", use_container_width=True):
+                        st.session_state.current_chat = user[0]
+                        st.session_state.last_message_id = 0
+                        st.rerun()
+        
+        with col2:
+            if st.session_state.current_chat:
+                other_user = get_user(st.session_state.current_chat)
+                if other_user:
+                    chat_header = st.columns([3, 1, 1])
+                    with chat_header[0]:
+                        st.subheader(f"Chat with {other_user[1]}")
+                    with chat_header[1]:
+                        if st.button("📞", help="Start Video Call"):
+                            meeting_url = create_video_call(user_id, st.session_state.current_chat)
+                            if meeting_url:
+                                st.success(f"Video call invitation sent to {other_user[1]}!")
+                                st.info("They will receive a notification to join the call.")
+                    with chat_header[2]:
+                        if st.button("🚫", help="Block User"):
+                            if block_user(user_id, st.session_state.current_chat):
+                                st.success(f"Blocked {other_user[1]}")
+                                st.session_state.current_chat = None
+                                st.rerun()
+                    
+                    messages = get_messages(user_id, st.session_state.current_chat)
+                    
+                    if messages:
+                        current_last_id = messages[-1][0] if messages else 0
+                        if current_last_id > st.session_state.last_message_id:
+                            st.session_state.last_message_id = current_last_id
+                    
+                    st.markdown("<div class='message-container'>", unsafe_allow_html=True)
+                    
+                    for msg in messages:
+                        if msg[1] == user_id:
+                            st.markdown(f"<div class='message sent'><b>You:</b> {msg[5]}</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"<div class='message received'><b>{msg[2]}:</b> {msg[5]}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    with st.form(key="message_form", clear_on_submit=True):
+                        message_col1, message_col2 = st.columns([4, 1])
+                        with message_col1:
+                            new_message = st.text_input("Type a message...", key="msg_input", label_visibility="collapsed")
+                        with message_col2:
+                            submitted = st.form_submit_button("➤", use_container_width=True, help="Send message")
+                        
+                        if submitted and new_message:
+                            if send_message(user_id, st.session_state.current_chat, new_message):
+                                st.session_state.last_message_id = 0
+                                st.rerun()
+                else:
+                    st.error("User not found or has been blocked")
+            else:
+                st.info("👆 Select a conversation or start a new chat from the sidebar")
+    
+    # Notifications Page
+    elif st.session_state.page == "Notifications":
+        st.header("🔔 Notifications")
+        
+        notifications = get_notifications(user_id)
+        if not notifications:
+            st.info("🎉 You're all caught up! No new notifications.")
+        else:
+            for notif in notifications:
+                css_class = "notification unread" if not notif[2] else "notification"
+                st.markdown(f"<div class='{css_class}'>{notif[1]}<br><small>🕒 {notif[3]}</small></div>", 
+                           unsafe_allow_html=True)
+                if not notif[2]:
+                    if st.button("Mark as read", key=f"read_{notif[0]}"):
+                        mark_notification_as_read(notif[0])
+                        st.rerun()
+    
+    # Discover Page
+    elif st.session_state.page == "Discover":
+        st.header("👥 Discover People")
+        
+        st.subheader("Suggested Users")
+        suggested_users = get_suggested_users(user_id)
+        
+        if not suggested_users:
+            st.info("🌟 You're following everyone! Great job being social!")
+        else:
+            for user in suggested_users:
+                user_info = get_user(user[0])
+                if user_info:
+                    with st.container():
+                        st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                        
+                        col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
+                        with col1:
+                            if user_info[3]:
+                                st.image(io.BytesIO(user_info[3]), width=60, output_format="PNG")
+                        with col2:
+                            st.write(f"**{user_info[1]}**")
+                            if user_info[4]:
+                                st.caption(user_info[4])
+                        with col3:
+                            if is_following(user_id, user[0]):
+                                if st.button("Unfollow", key=f"unfollow_{user[0]}"):
+                                    unfollow_user(user_id, user[0])
+                                    st.rerun()
+                            else:
+                                if st.button("Follow", key=f"follow_{user[0]}"):
+                                    follow_user(user_id, user[0])
+                                    st.rerun()
+                        with col4:
+                            if st.button("🚫", key=f"block_{user[0]}", help="Block User"):
+                                if block_user(user_id, user[0]):
+                                    st.success(f"Blocked {user_info[1]}")
+                                    st.rerun()
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Profile Page
+    elif st.session_state.page == "Profile":
+        user_info = get_user(user_id)
+        
+        if user_info:
+            st.header(f"👤 {user_info[1]}'s Profile")
+            
+            col1, col2 = st.columns([1, 2])
+            
+            with col1:
+                if user_info[3]:
+                    st.image(io.BytesIO(user_info[3]), width=150, output_format="PNG")
+                else:
+                    st.info("No profile picture")
+                
+                followers = get_followers(user_id)
+                following = get_following(user_id)
+                blocked = get_blocked_users(user_id)
+                
+                st.subheader("Stats")
+                st.metric("Followers", len(followers))
+                st.metric("Following", len(following))
+                st.metric("Blocked Users", len(blocked))
+                
+                if st.button("✏️ Edit Profile", use_container_width=True):
+                    st.session_state.page = "EditProfile"
+                    st.rerun()
+                
+                if st.button("🚫 Manage Blocked Users极", use_container_width=True):
+                    st.session_state.page = "BlockedUsers"
+                    st.rerun()
+            
+            with col2:
+                st.write(f"**Bio:** {user_info[4] if user_info[4] else 'No bio yet'}")
+                
+                st.subheader("Your Posts")
+                user_posts = get_user_posts(user_id)
+                
+                if not user_posts:
+                    st.info("📝 You haven't posted anything yet. Share your first post!")
+                else:
+                    for post in user_posts:
+                        with st.container():
+                            st.markdown(f"极<div class='post'>", unsafe_allow_html=True)
+                            
+                            col1, col2 = st.columns([4, 1])
+                            with col1:
+                                st.write(f"**{post[2]}** · 🕒 {post[6]}")
+                            with col2:
+                                if st.button("🗑️ Delete", key=f"delete_{post[0]}", use_container_width=True):
+                                    if delete_post(post[极0], user_id):
+                                        st.success("Post deleted successfully!")
+                                        st.rerun()
+                            
+                            st.write(post[3])
+                            
+                            if post[4] and post[5]:
+                                if post[4] == "image":
+                                    st.image(io.BytesIO(post[5]), use_column_width=True)
+                                elif post[4] == "video":
+                                    st.video(io.BytesIO(post[5]))
+                            
+                            st.write(f"❤️ {post[7]} likes")
+                            st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Edit Profile Page
+    elif st.session_state.page == "EditProfile":
+        st.header("✏️ Edit Profile")
+        
+        user_info = get_user(user_id)
+        
+        if user_info:
+            with st.form("EditProfileForm"):
+                new_username = st.text_input("Username", value=user_info[1])
+                new_email = st.text_input("Email", value=user_info[2])
+                new_bio = st.text_area("Bio", value=user_info[4] if user_info[4] else "", height=100)
+                new_profile_pic = st.file_uploader("Profile Picture", type=["jpg", "png", "jpeg"])
+                
+                if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                    try:
+                        c = conn.cursor()
+                        profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
+                        c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
+                                 (new_username, new_email, new_bio, profile_pic_data, user_id))
+                        conn.commit()
+                        st.success("Profile updated successfully!")
+                        time.sleep(1)
+                        st.session_state.page = "Profile"
+                        st.rerun()
+                    except sqlite3.Error as e:
+                        st.error(f"Error updating profile: {e}")
+                    finally:
+                        try:
+                            c.close()
+                        except:
+                            pass
