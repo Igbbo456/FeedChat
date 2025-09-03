@@ -390,11 +390,11 @@ def get_posts(user_id=None):
                            SUM(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as user_liked
                     FROM posts p
                     JOIN users u ON p.user_id = u.id
-                    LEFT JOIN likes极 l ON p.id = l.post_id
+                    LEFT JOIN likes l ON p.id = l.post_id
                     WHERE p.is_deleted = 0 
                     AND u.is_active = 1
                     AND p.user_id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id=?)
-                    AND (极p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?) OR p.user_id=?)
+                    AND (p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?) OR p.user_id=?)
                     GROUP BY p.id
                     ORDER BY p.created_at DESC
                 """, (user_id, user_id, user_id, user_id))
@@ -453,7 +453,7 @@ def get_user_posts(user_id):
         """, (user_id, user_id))
         return c.fetchall()
     except sqlite3.Error as e:
-        st.error(f极"Database error: {e}")
+        st.error(f"Database error: {e}")
         return []
     finally:
         try:
@@ -500,7 +500,7 @@ def follow_user(follower_id, following_id):
             
         c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         if not c.fetchone():
-            c.execute("INSERT INTO follows (极follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
+            c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
             conn.commit()
             
             follower = get_user(follower_id)
@@ -522,7 +522,7 @@ def follow_user(follower_id, following_id):
 def unfollow_user(follower_id, following_id):
     try:
         c = conn.cursor()
-        c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower极_id, following_id))
+        c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         conn.commit()
         return c.rowcount > 0
     except sqlite3.Error as e:
@@ -699,7 +699,7 @@ def get_following(user_id):
         c.execute("""
             SELECT u.id, u.username 
             FROM follows f 
-            JOIN users极 u ON f.following_id = u.id 
+            JOIN users u ON f.following_id = u.id 
             WHERE f.follower_id=?
         """, (user_id,))
         return c.fetchall()
@@ -715,7 +715,7 @@ def get_following(user_id):
 def get_suggested_users(user_id):
     try:
         c = conn.cursor()
-        c极.execute("""
+        c.execute("""
             SELECT id, username 
             FROM users 
             WHERE id != ? 
@@ -754,7 +754,7 @@ def create_video_call(caller_id, receiver_id):
         # Create notification
         caller = get_user(caller_id)
         if caller:
-            c.execute("INSERT INTO notifications (user极_id, content) VALUES (?, ?)",
+            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
                      (receiver_id, f"📞 Video call invitation from {caller[1]}"))
             conn.commit()
         
@@ -795,7 +795,7 @@ def update_call_status(call_id, status):
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
     finally:
-极        try:
+        try:
             c.close()
         except:
             pass
@@ -839,7 +839,7 @@ st.markdown("""
         background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
         padding: 15px;
         border-radius: 10px;
-        margin: 极10px 0;
+        margin: 10px 0;
         border-left: 4px solid #2196f3;
     }
     .message-container {
@@ -926,7 +926,7 @@ with st.sidebar:
 if not st.session_state.user:
     # Auth pages
     st.markdown("""
-        <div style='text-align: center; margin-bottom: 30极px;'>
+        <div style='text-align: center; margin-bottom: 30px;'>
             <h1 style='color: white;'>Welcome to FeedChat</h1>
             <p style='color: rgba(255, 255, 255, 0.8);'>Connect with friends and share your moments</p>
         </div>
@@ -951,7 +951,7 @@ if not st.session_state.user:
                     st.error("Please enter both username and password")
     
     with auth_tab2:
-        with st.form("极Sign Up"):
+        with st.form("Sign Up"):
             st.subheader("Join FeedChat Today!")
             new_username = st.text_input("Choose a username", placeholder="Enter a unique username")
             new_email = st.text_input("Email", placeholder="Enter your email")
@@ -1105,7 +1105,7 @@ else:
             all_users = get_all_users()
             for user in all_users:
                 if user[0] != user_id and not is_blocked(user_id, user[0]):
-                    if st.button(f"💬 {user极[1]}", key=f"new_{user[0]}", use_container_width=True):
+                    if st.button(f"💬 {user[1]}", key=f"new_{user[0]}", use_container_width=True):
                         st.session_state.current_chat = user[0]
                         st.session_state.last_message_id = 0
                         st.rerun()
@@ -1176,9 +1176,9 @@ else:
                 st.markdown(f"<div class='{css_class}'>{notif[1]}<br><small>🕒 {notif[3]}</small></div>", 
                            unsafe_allow_html=True)
                 if not notif[2]:
-                    if st.button("Mark as read", key=f"极read_{notif[0]}"):
+                    if st.button("Mark as read", key=f"read_{notif[0]}"):
                         mark_notification_as_read(notif[0])
-                        st.r极erun()
+                        st.rerun()
     
     # Discover Page
     elif st.session_state.page == "Discover":
@@ -1229,7 +1229,7 @@ else:
         if user_info:
             st.header(f"👤 {user_info[1]}'s Profile")
             
-            col1, col2 = st.columns([1极, 2])
+            col1, col2 = st.columns([1, 2])
             
             with col1:
                 if user_info[3]:
@@ -1328,3 +1328,4 @@ else:
                             c.close()
                         except:
                             pass
+
