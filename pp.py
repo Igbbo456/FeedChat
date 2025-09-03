@@ -584,7 +584,7 @@ def get_conversations(user_id):
         """, (user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id))
         return c.fetchall()
     except sqlite3.Error as e:
-        st.error(f"Database error: {极e}")
+        st.error(f"Database error: {e}")
         return []
     finally:
         try:
@@ -601,7 +601,7 @@ def get_suggested_users(user_id):
             WHERE id != ? 
             AND is_active = 1
             AND id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id=?)
-            AND id NOT IN (SELECT following_id FROM follows WHERE follower极_id=?)
+            AND id NOT IN (SELECT following_id FROM follows WHERE follower_id=?)
             ORDER BY RANDOM() 
             LIMIT 5
         """, (user_id, user_id, user_id))
@@ -653,7 +653,7 @@ def get_pending_calls(user_id):
     try:
         c = conn.cursor()
         c.execute("""
-            SELECT id极, caller_id, meeting_url, created_at 
+            SELECT id, caller_id, meeting_url, created_at 
             FROM calls 
             WHERE receiver_id=? AND status='scheduled'
             ORDER BY created_at DESC
@@ -673,7 +673,7 @@ def update_call_status(call_id, status):
         c = conn.cursor()
         c.execute("UPDATE calls SET status=? WHERE id=?", (status, call_id))
         conn.commit()
-   极 except sqlite3.Error as e:
+    except sqlite3.Error as e:
         st.error(f"Database error: {e}")
     finally:
         try:
@@ -721,7 +721,7 @@ if "active_meeting" not in st.session_state:
 with st.sidebar:
     st.markdown("""
         <div style='text-align: center; padding: 20px 0;'>
-            <h1 style='极color: white; margin-bottom: 30px;'>💬 FeedChat</h1>
+            <h1 style='color: white; margin-bottom: 30px;'>💬 FeedChat</h1>
         </div>
     """, unsafe_allow_html=True)
     
@@ -917,3 +917,4 @@ else:
 
 # For the sake of brevity, I've focused on the core functionality
 # The other pages would follow similar patterns with proper error handling
+
