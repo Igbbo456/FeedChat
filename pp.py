@@ -608,7 +608,7 @@ def mark_messages_as_read(sender_id, receiver_id):
 def get_notifications(user_id):
     try:
         c = conn.cursor()
-        c.execute("SELECT id极, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created极_at DESC", (user_id,))
+        c.execute("SELECT id, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
         return c.fetchall()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -634,7 +634,7 @@ def mark_notification_as_read(notification_id):
 
 def get_followers(user_id):
     try:
-        c极 = conn.cursor()
+        c = conn.cursor()
         c.execute("""
             SELECT u.id, u.username 
             FROM follows f 
@@ -705,7 +705,7 @@ def create_video_call(caller_id, receiver_id):
         meeting_url = f"https://meet.jit.si/{meeting_id}"
         
         # Create call record
-        c.execute("INSERT INTO calls (caller_id, receiver_id, meeting_url, status) VALUES极 (?, ?, ?, ?)",
+        c.execute("INSERT INTO calls (caller_id, receiver_id, meeting_url, status) VALUES (?, ?, ?, ?)",
                  (caller_id, receiver_id, meeting_url, "scheduled"))
         conn.commit()
         
@@ -771,7 +771,7 @@ st.markdown("""
         background-attachment: fixed;
     }
     .blocked-user {
-        background: linear-gradient(135deg, #ffebee 0%, #极ffcdd2 100%);
+        background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
         padding: 15px;
         border-radius: 10px;
         margin: 10px 0;
@@ -786,7 +786,7 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.3);
     }
     .user-card {
-        background: linear-gradient(135deg, #ffffff 极0%, #f8f9fa 100%);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
         padding: 20px;
         border-radius: 15px;
         margin-bottom: 15px;
@@ -889,7 +889,7 @@ if not st.session_state.user:
         </div>
     """, unsafe_allow_html=True)
     
-    auth_tab1, auth极_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
+    auth_tab1, auth_tab2 = st.tabs(["🔐 Login", "📝 Sign Up"])
     
     with auth_tab1:
         with st.form("Login"):
@@ -991,7 +991,7 @@ else:
                     col1, col2, col3 = st.columns([1, 3, 1])
                     with col1:
                         user_info = get_user(post[1])
-                        if user_info and user_info极[3]:
+                        if user_info and user_info[3]:
                             st.image(io.BytesIO(user_info[3]), width=50, output_format="PNG")
                     with col2:
                         st.write(f"**{post[2]}** · 🕒 {post[6]}")
@@ -1026,7 +1026,7 @@ else:
                     with col3:
                         # Delete button for own posts
                         if post[1] == user_id:
-                            if st.button("🗑️", key=f"delete_{post[0]}", help极="Delete Post"):
+                            if st.button("🗑️", key=f"delete_{post[0]}", help="Delete Post"):
                                 if delete_post(post[0], user_id):
                                     st.success("Post deleted successfully!")
                                     st.rerun()
@@ -1199,7 +1199,7 @@ else:
                     st.session_state.page = "EditProfile"
                     st.rerun()
                 
-                if st.button("🚫 Manage Blocked Users极", use_container_width=True):
+                if st.button("🚫 Manage Blocked Users", use_container_width=True):
                     st.session_state.page = "BlockedUsers"
                     st.rerun()
             
@@ -1214,14 +1214,14 @@ else:
                 else:
                     for post in user_posts:
                         with st.container():
-                            st.markdown(f"极<div class='post'>", unsafe_allow_html=True)
+                            st.markdown(f"<div class='post'>", unsafe_allow_html=True)
                             
                             col1, col2 = st.columns([4, 1])
                             with col1:
                                 st.write(f"**{post[2]}** · 🕒 {post[6]}")
                             with col2:
                                 if st.button("🗑️ Delete", key=f"delete_{post[0]}", use_container_width=True):
-                                    if delete_post(post[极0], user_id):
+                                    if delete_post(post[0], user_id):
                                         st.success("Post deleted successfully!")
                                         st.rerun()
                             
@@ -1267,3 +1267,4 @@ else:
                             c.close()
                         except:
                             pass
+
