@@ -128,6 +128,38 @@ def init_db():
 conn = init_db()
 
 # ===================================
+# NEW: Image validation function
+# ===================================
+def is_valid_image(image_data):
+    """Check if the image data is valid and can be opened by PIL"""
+    try:
+        if image_data is None:
+            return False
+        image = Image.open(io.BytesIO(image_data))
+        image.verify()  # Verify that it is, in fact, an image
+        return True
+    except (IOError, SyntaxError, Exception):
+        return False
+
+# ===================================
+# NEW: Safe image display function
+# ===================================
+def display_image_safely(image_data, caption="", width=None, use_column_width=False):
+    """Safely display an image with error handling"""
+    try:
+        if image_data and is_valid_image(image_data):
+            if width:
+                st.image(io.BytesIO(image_data), caption=caption, width=width)
+            elif use_column_width:
+                st.image(io.BytesIO(image_data), caption=caption, use_column_width=True)
+            else:
+                st.image(io.BytesIO(image_data), caption=caption)
+        else:
+            st.warning("Unable to display image (corrupted or invalid format)")
+    except Exception as e:
+        st.warning(f"Error displaying image: {str(e)}")
+
+# ===================================
 # NEW: Blocking Functions
 # ===================================
 def block_user(blocker_id, blocked_id):
@@ -236,6 +268,11 @@ def create_user(username, password, email, profile_pic=None, bio=""):
         if c.fetchone():
             return False
             
+        # Validate profile picture before saving
+        if profile_pic and not is_valid_image(profile_pic):
+            st.error("Invalid profile picture format. Please use JPG, PNG, or JPEG.")
+            return False
+            
         c.execute("INSERT INTO users (username, password, email, profile_pic, bio, is_active) VALUES (?, ?, ?, ?, ?, ?)",
                  (username, password, email, profile_pic, bio, True))
         conn.commit()
@@ -323,6 +360,11 @@ def get_all_users():
 def create_post(user_id, content, media_type=None, media_data=None):
     try:
         c = conn.cursor()
+        # Validate media before saving
+        if media_data and media_type == "image" and not is_valid_image(media_data):
+            st.error("Invalid image format. Please use JPG, PNG, or JPEG.")
+            return None
+            
         c.execute("INSERT INTO posts (user_id, content, media_type, media_data) VALUES (?, ?, ?, ?)",
                  (user_id, content, media_type, media_data))
         conn.commit()
@@ -348,11 +390,11 @@ def get_posts(user_id=None):
                            SUM(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as user_liked
                     FROM posts p
                     JOIN users u ON p.user_id = u.id
-                    LEFT JOIN likes l ON p.id = l.post_id
+                    LEFT JOIN likes极 l ON p.id = l.post_id
                     WHERE p.is_deleted = 0 
                     AND u.is_active = 1
                     AND p.user_id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id=?)
-                    AND (p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?) OR p.user_id=?)
+                    AND (极p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?) OR p.user_id=?)
                     GROUP BY p.id
                     ORDER BY p.created_at DESC
                 """, (user_id, user_id, user_id, user_id))
@@ -411,7 +453,7 @@ def get_user_posts(user_id):
         """, (user_id, user_id))
         return c.fetchall()
     except sqlite3.Error as e:
-        st.error(f"Database error: {e}")
+        st.error(f极"Database error: {e}")
         return []
     finally:
         try:
@@ -458,7 +500,7 @@ def follow_user(follower_id, following_id):
             
         c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         if not c.fetchone():
-            c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
+            c.execute("INSERT INTO follows (极follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
             conn.commit()
             
             follower = get_user(follower_id)
@@ -480,7 +522,7 @@ def follow_user(follower_id, following_id):
 def unfollow_user(follower_id, following_id):
     try:
         c = conn.cursor()
-        c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
+        c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower极_id, following_id))
         conn.commit()
         return c.rowcount > 0
     except sqlite3.Error as e:
@@ -657,7 +699,7 @@ def get_following(user_id):
         c.execute("""
             SELECT u.id, u.username 
             FROM follows f 
-            JOIN users u ON f.following_id = u.id 
+            JOIN users极 u ON f.following_id = u.id 
             WHERE f.follower_id=?
         """, (user_id,))
         return c.fetchall()
@@ -673,7 +715,7 @@ def get_following(user_id):
 def get_suggested_users(user_id):
     try:
         c = conn.cursor()
-        c.execute("""
+        c极.execute("""
             SELECT id, username 
             FROM users 
             WHERE id != ? 
@@ -712,7 +754,7 @@ def create_video_call(caller_id, receiver_id):
         # Create notification
         caller = get_user(caller_id)
         if caller:
-            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
+            c.execute("INSERT INTO notifications (user极_id, content) VALUES (?, ?)",
                      (receiver_id, f"📞 Video call invitation from {caller[1]}"))
             conn.commit()
         
@@ -753,7 +795,7 @@ def update_call_status(call_id, status):
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
     finally:
-        try:
+极        try:
             c.close()
         except:
             pass
@@ -797,7 +839,7 @@ st.markdown("""
         background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
         padding: 15px;
         border-radius: 10px;
-        margin: 10px 0;
+        margin: 极10px 0;
         border-left: 4px solid #2196f3;
     }
     .message-container {
@@ -846,7 +888,8 @@ with st.sidebar:
     if st.session_state.user:
         user_info = get_user(st.session_state.user[0])
         if user_info and user_info[3]:
-            st.image(io.BytesIO(user_info[3]), width=80, output_format="PNG")
+            # Use safe image display for profile pictures
+            display_image_safely(user_info[3], width=80)
         st.success(f"**Welcome, {user_info[1]}!**" if user_info else "**Welcome!**")
         
         st.markdown("---")
@@ -883,7 +926,7 @@ with st.sidebar:
 if not st.session_state.user:
     # Auth pages
     st.markdown("""
-        <div style='text-align: center; margin-bottom: 30px;'>
+        <div style='text-align: center; margin-bottom: 30极px;'>
             <h1 style='color: white;'>Welcome to FeedChat</h1>
             <p style='color: rgba(255, 255, 255, 0.8);'>Connect with friends and share your moments</p>
         </div>
@@ -908,7 +951,7 @@ if not st.session_state.user:
                     st.error("Please enter both username and password")
     
     with auth_tab2:
-        with st.form("Sign Up"):
+        with st.form("极Sign Up"):
             st.subheader("Join FeedChat Today!")
             new_username = st.text_input("Choose a username", placeholder="Enter a unique username")
             new_email = st.text_input("Email", placeholder="Enter your email")
@@ -973,10 +1016,12 @@ else:
                 if post_content or media_file:
                     media_data = media_file.read() if media_file else None
                     media_type_val = media_type.lower() if media_file else None
-                    create_post(user_id, post_content, media_type_val, media_data)
-                    st.success("Posted successfully!")
-                    time.sleep(1)
-                    st.rerun()
+                    if create_post(user_id, post_content, media_type_val, media_data):
+                        st.success("Posted successfully!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("Failed to create post")
                 else:
                     st.warning("Please add some content or media to your post")
             
@@ -992,7 +1037,8 @@ else:
                     with col1:
                         user_info = get_user(post[1])
                         if user_info and user_info[3]:
-                            st.image(io.BytesIO(user_info[3]), width=50, output_format="PNG")
+                            # Use safe image display for profile pictures
+                            display_image_safely(user_info[3], width=50)
                     with col2:
                         st.write(f"**{post[2]}** · 🕒 {post[6]}")
                     with col3:
@@ -1007,9 +1053,13 @@ else:
                     
                     if post[4] and post[5]:
                         if post[4] == "image":
-                            st.image(io.BytesIO(post[5]), use_column_width=True)
+                            # Use safe image display for post images
+                            display_image_safely(post[5], use_column_width=True)
                         elif post[4] == "video":
-                            st.video(io.BytesIO(post[5]))
+                            try:
+                                st.video(io.BytesIO(post[5]))
+                            except:
+                                st.warning("Unable to display video (corrupted or invalid format)")
                     
                     col1, col2, col3 = st.columns([2, 2, 1])
                     with col1:
@@ -1055,7 +1105,7 @@ else:
             all_users = get_all_users()
             for user in all_users:
                 if user[0] != user_id and not is_blocked(user_id, user[0]):
-                    if st.button(f"💬 {user[1]}", key=f"new_{user[0]}", use_container_width=True):
+                    if st.button(f"💬 {user极[1]}", key=f"new_{user[0]}", use_container_width=True):
                         st.session_state.current_chat = user[0]
                         st.session_state.last_message_id = 0
                         st.rerun()
@@ -1126,9 +1176,9 @@ else:
                 st.markdown(f"<div class='{css_class}'>{notif[1]}<br><small>🕒 {notif[3]}</small></div>", 
                            unsafe_allow_html=True)
                 if not notif[2]:
-                    if st.button("Mark as read", key=f"read_{notif[0]}"):
+                    if st.button("Mark as read", key=f"极read_{notif[0]}"):
                         mark_notification_as_read(notif[0])
-                        st.rerun()
+                        st.r极erun()
     
     # Discover Page
     elif st.session_state.page == "Discover":
@@ -1149,7 +1199,8 @@ else:
                         col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
                         with col1:
                             if user_info[3]:
-                                st.image(io.BytesIO(user_info[3]), width=60, output_format="PNG")
+                                # Use safe image display for profile pictures
+                                display_image_safely(user_info[3], width=60)
                         with col2:
                             st.write(f"**{user_info[1]}**")
                             if user_info[4]:
@@ -1178,11 +1229,12 @@ else:
         if user_info:
             st.header(f"👤 {user_info[1]}'s Profile")
             
-            col1, col2 = st.columns([1, 2])
+            col1, col2 = st.columns([1极, 2])
             
             with col1:
                 if user_info[3]:
-                    st.image(io.BytesIO(user_info[3]), width=150, output_format="PNG")
+                    # Use safe image display for profile pictures
+                    display_image_safely(user_info[3], width=150)
                 else:
                     st.info("No profile picture")
                 
@@ -1229,9 +1281,13 @@ else:
                             
                             if post[4] and post[5]:
                                 if post[4] == "image":
-                                    st.image(io.BytesIO(post[5]), use_column_width=True)
+                                    # Use safe image display for post images
+                                    display_image_safely(post[5], use_column_width=True)
                                 elif post[4] == "video":
-                                    st.video(io.BytesIO(post[5]))
+                                    try:
+                                        st.video(io.BytesIO(post[5]))
+                                    except:
+                                        st.warning("Unable to display video (corrupted or invalid format)")
                             
                             st.write(f"❤️ {post[7]} likes")
                             st.markdown("</div>", unsafe_allow_html=True)
@@ -1253,13 +1309,18 @@ else:
                     try:
                         c = conn.cursor()
                         profile_pic_data = new_profile_pic.read() if new_profile_pic else user_info[3]
-                        c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
-                                 (new_username, new_email, new_bio, profile_pic_data, user_id))
-                        conn.commit()
-                        st.success("Profile updated successfully!")
-                        time.sleep(1)
-                        st.session_state.page = "Profile"
-                        st.rerun()
+                        
+                        # Validate new profile picture if provided
+                        if new_profile_pic and not is_valid_image(profile_pic_data):
+                            st.error("Invalid profile picture format. Please use JPG, PNG, or JPEG.")
+                        else:
+                            c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
+                                     (new_username, new_email, new_bio, profile_pic_data, user_id))
+                            conn.commit()
+                            st.success("Profile updated successfully!")
+                            time.sleep(1)
+                            st.session_state.page = "Profile"
+                            st.rerun()
                     except sqlite3.Error as e:
                         st.error(f"Error updating profile: {e}")
                     finally:
@@ -1267,4 +1328,3 @@ else:
                             c.close()
                         except:
                             pass
-
