@@ -144,14 +144,14 @@ def is_valid_image(image_data):
 # ===================================
 # NEW: Safe image display function
 # ===================================
-def display_image_safely(image_data, caption="", width=None, use_column_width=False):
+def display_image_safely(image_data, caption="", width=None, use_container_width=False):
     """Safely display an image with error handling"""
     try:
         if image_data and is_valid_image(image_data):
             if width:
                 st.image(io.BytesIO(image_data), caption=caption, width=width)
-            elif use_column_width:
-                st.image(io.BytesIO(image_data), caption=caption, use_column_width=True)
+            elif use_container_width:
+                st.image(io.BytesIO(image_data), caption=caption, use_container_width=True)
             else:
                 st.image(io.BytesIO(image_data), caption=caption)
         else:
@@ -1054,7 +1054,7 @@ else:
                     if post[4] and post[5]:
                         if post[4] == "image":
                             # Use safe image display for post images
-                            display_image_safely(post[5], use_column_width=True)
+                            display_image_safely(post[5], use_container_width=True)
                         elif post[4] == "video":
                             try:
                                 st.video(io.BytesIO(post[5]))
@@ -1282,7 +1282,7 @@ else:
                             if post[4] and post[5]:
                                 if post[4] == "image":
                                     # Use safe image display for post images
-                                    display_image_safely(post[5], use_column_width=True)
+                                    display_image_safely(post[5], use_container_width=True)
                                 elif post[4] == "video":
                                     try:
                                         st.video(io.BytesIO(post[5]))
@@ -1328,4 +1328,5 @@ else:
                             c.close()
                         except:
                             pass
+
 
