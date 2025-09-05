@@ -83,7 +83,7 @@ def init_db():
         receiver_id INTEGER,
         content TEXT,
         is_read BOOLEAN DEFAULT FALSE,
-        created极 DATETIME DEFAULT CURRENT_TIMESTAMP
+        created DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
@@ -103,7 +103,7 @@ def init_db():
     c.execute("""
     CREATE TABLE IF NOT EXISTS notifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-       极 user_id INTEGER,
+        user_id INTEGER,
         content TEXT,
         is_read BOOLEAN DEFAULT FALSE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -111,7 +111,7 @@ def init_db():
     """)
 
     # Blocked users table - NEW
-    c极.execute("""
+    c.execute("""
     CREATE TABLE IF NOT EXISTS blocked_users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         blocker_id INTEGER,
@@ -151,7 +151,7 @@ def display_image_safely(image_data, caption="", width=None, use_container_width
             if width:
                 st.image(io.BytesIO(image_data), caption=caption, width=width)
             elif use_container_width:
-                st.image(io.Bytes极IO(image_data), caption=caption, use_container_width=True)
+                st.image(io.BytesIO(image_data), caption=caption, use_container_width=True)
             else:
                 st.image(io.BytesIO(image_data), caption=caption)
         else:
@@ -197,7 +197,7 @@ def unblock_user(blocker_id, blocked_id):
         st.error(f"Database error: {e}")
         return False
     finally:
-极        try:
+        try:
             c.close()
         except:
             pass
@@ -208,7 +208,7 @@ def is_blocked(blocker_id, blocked_id):
         c.execute("SELECT id FROM blocked_users WHERE blocker_id=? AND blocked_id=?", (blocker_id, blocked_id))
         return c.fetchone() is not None
     except sqlite3.Error as e:
-        st.error(f极"Database error: {e}")
+        st.error(f"Database error: {e}")
         return False
     finally:
         try:
@@ -282,7 +282,7 @@ def create_user(username, password, email, profile_pic=None, bio=""):
         return False
     finally:
         try:
-           极 c.close()
+            c.close()
         except:
             pass
 
@@ -324,7 +324,7 @@ def get_user(user_id):
             pass
         
         # Fallback: get user without is_active check
-        c.execute("SELECT极 id, username, email, profile_pic, bio FROM users WHERE id=?", (user极id,))
+        c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE id=?", (userid,))
         return c.fetchone()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -365,7 +365,7 @@ def create_post(user_id, content, media_type=None, media_data=None):
             st.error("Invalid image format. Please use JPG, PNG, or JPEG.")
             return None
             
-        c.execute("INSERT INTO posts (user_id, content, media_type,极 media_data) VALUES (?, ?, ?, ?)",
+        c.execute("INSERT INTO posts (user_id, content, media_type, media_data) VALUES (?, ?, ?, ?)",
                  (user_id, content, media_type, media_data))
         conn.commit()
         return c.lastrowid
@@ -389,12 +389,12 @@ def get_posts(user_id=None):
                            COUNT(l.id) as like_count,
                            SUM(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as user_liked
                     FROM posts p
-                    JOIN users u ON p.user_id =极 u.id
+                    JOIN users u ON p.user_id = u.id
                     LEFT JOIN likes l ON p.id = l.post_id
                     WHERE p.is_deleted = 0 
                     AND u.is_active = 1
                     AND p.user_id NOT IN (SELECT blocked_id FROM blocked_users WHERE blocker_id=?)
-                    AND (极p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?) OR p.user_id=?)
+                    AND (p.user_id IN (SELECT following_id FROM follows WHERE follower_id=?) OR p.user_id=?)
                     GROUP BY p.id
                     ORDER BY p.created_at DESC
                 """, (user_id, user_id, user_id, user_id))
@@ -405,7 +405,7 @@ def get_posts(user_id=None):
             
             # Simple fallback query
             c.execute("""
-                SELECT p.id, p.user极_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
+                SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
                        COUNT(l.id) as like_count,
                        SUM(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as user_liked
                 FROM posts p
@@ -443,10 +443,10 @@ def get_user_posts(user_id):
         c.execute("""
             SELECT p.id, p.user_id, u.username, p.content, p.media_type, p.media_data, p.created_at,
                    COUNT(l.id) as like_count,
-                   SUM(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END)极 as user_liked
+                   SUM(CASE WHEN l.user_id = ? THEN 1 ELSE 0 END) as user_liked
             FROM posts p
-            JOIN users极 u ON p.user_id = u.id
-            LEFT JOIN likes l ON p.id = l.post极_id
+            JOIN users u ON p.user_id = u.id
+            LEFT JOIN likes l ON p.id = l.post_id
             WHERE p.user_id=? AND p.is_deleted=0
             GROUP BY p.id
             ORDER BY p.created_at DESC
@@ -465,7 +465,7 @@ def like_post(user_id, post_id):
     try:
         c = conn.cursor()
         c.execute("SELECT id FROM likes WHERE user_id=? AND post_id=?", (user_id, post_id))
-       极 if not c.fetchone():
+        if not c.fetchone():
             c.execute("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", (user_id, post_id))
             conn.commit()
             
@@ -500,7 +500,7 @@ def follow_user(follower_id, following_id):
             
         c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         if not c.fetchone():
-            c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower极_id, following_id))
+            c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
             conn.commit()
             
             follower = get_user(follower_id)
@@ -526,7 +526,7 @@ def unfollow_user(follower_id, following_id):
         conn.commit()
         return c.rowcount > 0
     except sqlite3.Error as e:
-        st.error(f"Database error极: {e}")
+        st.error(f"Database error: {e}")
         return False
     finally:
         try:
@@ -537,7 +537,7 @@ def unfollow_user(follower_id, following_id):
 def is_following(follower_id, following_id):
     try:
         c = conn.cursor()
-        c.execute("SELECT id FROM follows极 WHERE follower_id=? AND following_id=?", (follower_id, following_id))
+        c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
         return c.fetchone() is not None
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -579,7 +579,7 @@ def get_messages(user1_id, user2_id):
     try:
         c = conn.cursor()
         # Check if blocked
-        if is_blocked(user2_id, user极1_id):
+        if is_blocked(user2_id, user1_id):
             return []
             
         c.execute("""
@@ -603,7 +603,7 @@ def get_messages(user1_id, user2_id):
 
 def get_conversations(user_id):
     try:
-        c = conn极.cursor()
+        c = conn.cursor()
         c.execute("""
             SELECT DISTINCT 
                 CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END as other_user_id,
@@ -613,10 +613,10 @@ def get_conversations(user_id):
                     OR (sender_id = other_user_id AND receiver_id = ?)
                  ORDER BY created_at DESC LIMIT 1) as last_message,
                 (SELECT created_at FROM messages 
-                 WHERE (sender_id = ? AND receiver_id = other_user极_id) 
+                 WHERE (sender_id = ? AND receiver_id = other_user_id) 
                     OR (sender_id = other_user_id AND receiver_id = ?)
                  ORDER BY created_at DESC LIMIT 1) as last_message_time,
-                SUM(CASE WHEN m.receiver_id = ? AND m.is_read = 0 THEN 1 ELSE 0 END) as un极read_count
+                SUM(CASE WHEN m.receiver_id = ? AND m.is_read = 0 THEN 1 ELSE 0 END) as unread_count
             FROM messages m
             JOIN users u ON u.id = CASE WHEN m.sender_id = ? THEN m.receiver_id ELSE m.sender_id END
             WHERE (m.sender_id = ? OR m.receiver_id = ?)
@@ -648,7 +648,7 @@ def mark_messages_as_read(sender_id, receiver_id):
             pass
 
 def get_notifications(user_id):
-   极 try:
+    try:
         c = conn.cursor()
         c.execute("SELECT id, content, is_read, created_at FROM notifications WHERE user_id=? ORDER BY created_at DESC", (user_id,))
         return c.fetchall()
@@ -664,7 +664,7 @@ def get_notifications(user_id):
 def mark_notification_as_read(notification_id):
     try:
         c = conn.cursor()
-        c.execute("UPDATE notifications SET is_read=1 WHERE极 id=?", (notification_id,))
+        c.execute("UPDATE notifications SET is_read=1 WHERE id=?", (notification_id,))
         conn.commit()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -712,9 +712,9 @@ def get_following(user_id):
         except:
             pass
 
-def get_suggested_users(user极_id):
+def get_suggested_users(user_id):
     try:
-        c极 = conn.cursor()
+        c = conn.cursor()
         c.execute("""
             SELECT id, username 
             FROM users 
@@ -754,7 +754,7 @@ def create_video_call(caller_id, receiver_id):
         # Create notification
         caller = get_user(caller_id)
         if caller:
-            c.execute("INSERT INTO notifications (user极_id, content) VALUES (?, ?)",
+            c.execute("INSERT INTO notifications (user_id, content) VALUES (?, ?)",
                      (receiver_id, f"📞 Video call invitation from {caller[1]}"))
             conn.commit()
         
@@ -773,7 +773,7 @@ def get_pending_calls(user_id):
         c = conn.cursor()
         c.execute("""
             SELECT id, caller_id, meeting_url, created_at 
-极           FROM calls 
+           FROM calls 
             WHERE receiver_id=? AND status='scheduled'
             ORDER BY created_at DESC
         """, (user_id,))
@@ -809,7 +809,7 @@ st.set_page_config(page_title="FeedChat", page_icon="💬", layout="wide", initi
 st.markdown("""
     <style>
     .stApp {
-        background: linear-gradient(135deg, #667eea 极0%, #764ba2 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         background-attachment: fixed;
     }
     .blocked-user {
@@ -828,7 +828,7 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.3);
     }
     .user-card {
-        background: linear-gradient(135deg, #ffffff 0%, #极f8f9fa 100%);
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
         padding: 20px;
         border-radius: 15px;
         margin-bottom: 15px;
@@ -845,7 +845,7 @@ st.markdown("""
     .message-container {
         max-height: 400px;
         overflow-y: auto;
-        padding: 极10px;
+        padding: 10px;
     }
     .message {
         padding: 10px;
@@ -869,7 +869,7 @@ if "user" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = "Feed"
 if "current_chat" not in st.session_state:
-    st.session_state.current极chat = None
+    st.session_state.currentchat = None
 if "message_input" not in st.session_state:
     st.session_state.message_input = ""
 if "last_message_id" not in st.session_state:
@@ -903,7 +903,7 @@ with st.sidebar:
         with nav_col2:
             if st.button("🔔", help="Notifications"):
                 st.session_state.page = "Notifications"
-           极 if st.button("👤", help="Profile"):
+            if st.button("👤", help="Profile"):
                 st.session_state.page = "Profile"
         
         if st.button("🌐 Discover People", use_container_width=True):
@@ -927,7 +927,7 @@ if not st.session_state.user:
     # Auth pages
     st.markdown("""
         <div style='text-align: center; margin-bottom: 30px;'>
-            <h1 style极='color: white;'>Welcome to FeedChat</h1>
+            <h1 style='color: white;'>Welcome to FeedChat</h1>
             <p style='color: rgba(255, 255, 255, 0.8);'>Connect with friends and share your moments</p>
         </div>
     """, unsafe_allow_html=True)
@@ -950,11 +950,11 @@ if not st.session_state.user:
                 else:
                     st.error("Please enter both username and password")
     
-    with auth极_tab2:
+    with auth_tab2:
         with st.form("Sign Up"):
             st.subheader("Join FeedChat Today!")
             new_username = st.text_input("Choose a username", placeholder="Enter a unique username")
-            new_email = st.text_input("Email", placeholder极="Enter your email")
+            new_email = st.text_input("Email", placeholder="Enter your email")
             new_password = st.text_input("Choose a password", type="password", placeholder="Create a strong password")
             confirm_password = st.text_input("Confirm password", type="password", placeholder="Confirm your password")
             profile_pic = st.file_uploader("Profile picture (optional)", type=["jpg", "png", "jpeg"])
@@ -1065,7 +1065,7 @@ else:
                     with col1:
                         like_text = "❤️ Unlike" if post[8] else "🤍 Like"
                         if st.button(like_text, key=f"like_{post[0]}"):
-                            like_post(user极_id, post[0])
+                            like_post(user_id, post[0])
                             st.rerun()
                         st.write(f"**{post[7]}** likes")
                     
@@ -1140,7 +1140,7 @@ else:
                     st.markdown("<div class='message-container'>", unsafe_allow_html=True)
                     
                     for msg in messages:
-                        if msg[极1] == user_id:
+                        if msg[1] == user_id:
                             st.markdown(f"<div class='message sent'><b>You:</b> {msg[5]}</div>", unsafe_allow_html=True)
                         else:
                             st.markdown(f"<div class='message received'><b>{msg[2]}:</b> {msg[5]}</div>", unsafe_allow_html=True)
@@ -1173,7 +1173,7 @@ else:
         else:
             for notif in notifications:
                 css_class = "notification unread" if not notif[2] else "notification"
-                st.markdown(f"极<div class='{css_class}'>{notif[1]}<br><small>🕒 {notif[3]}</small></div>", 
+                st.markdown(f"<div class='{css_class}'>{notif[1]}<br><small>🕒 {notif[3]}</small></div>", 
                            unsafe_allow_html=True)
                 if not notif[2]:
                     if st.button("Mark as read", key=f"read_{notif[0]}"):
@@ -1202,7 +1202,7 @@ else:
                                 # Use safe image display for profile pictures
                                 display_image_safely(user_info[3], width=60)
                         with col2:
-                            st.write(f"**{user_info[极1]}**")
+                            st.write(f"**{user_info[1]}**")
                             if user_info[4]:
                                 st.caption(user_info[4])
                         with col3:
@@ -1259,7 +1259,7 @@ else:
                 st.write(f"**Bio:** {user_info[4] if user_info[4] else 'No bio yet'}")
                 
                 st.subheader("Your Posts")
-                user_posts =极 get_user_posts(user_id)
+                user_posts = get_user_posts(user_id)
                 
                 if not user_posts:
                     st.info("📝 You haven't posted anything yet. Share your first post!")
@@ -1315,7 +1315,7 @@ else:
                             st.error("Invalid profile picture format. Please use JPG, PNG, or JPEG.")
                         else:
                             c.execute("UPDATE users SET username=?, email=?, bio=?, profile_pic=? WHERE id=?",
-                                     (new_username, new_email, new_b极io, profile_pic_data, user_id))
+                                     (new_username, new_email, new_bio, profile_pic_data, user_id))
                             conn.commit()
                             st.success("Profile updated successfully!")
                             time.sleep(1)
@@ -1328,3 +1328,4 @@ else:
                             c.close()
                         except:
                             pass
+
