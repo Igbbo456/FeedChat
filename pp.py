@@ -332,8 +332,8 @@ def get_user(user_id):
     finally:
         try:
             c.close()
-        except:
-        pass
+except:
+            pass  # Fixed indentation here
 
 def get_all_users():
     try:
@@ -1328,4 +1328,5 @@ else:
                             c.close()
                         except:
                             pass
+
 
