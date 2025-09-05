@@ -324,7 +324,7 @@ def get_user(user_id):
             pass
         
         # Fallback: get user without is_active check
-        c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE id=?", (userid,))
+        c.execute("SELECT id, username, email, profile_pic, bio FROM users WHERE id=?", (user_id,))
         return c.fetchone()
     except sqlite3.Error as e:
         st.error(f"Database error: {e}")
@@ -332,8 +332,8 @@ def get_user(user_id):
     finally:
         try:
             c.close()
-except:
-            pass  # Fixed indentation here
+        except Exception:  # Fixed: added Exception type
+            pass
 
 def get_all_users():
     try:
@@ -1328,5 +1328,6 @@ else:
                             c.close()
                         except:
                             pass
+
 
 
