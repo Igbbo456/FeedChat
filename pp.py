@@ -83,7 +83,7 @@ def init_db():
         receiver_id INTEGER,
         content TEXT,
         is_read BOOLEAN DEFAULT FALSE,
-        created DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
@@ -184,7 +184,7 @@ def block_user(blocker_id, blocked_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def unblock_user(blocker_id, blocked_id):
@@ -199,7 +199,7 @@ def unblock_user(blocker_id, blocked_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def is_blocked(blocker_id, blocked_id):
@@ -213,7 +213,7 @@ def is_blocked(blocker_id, blocked_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_blocked_users(user_id):
@@ -232,7 +232,7 @@ def get_blocked_users(user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 # ===================================
@@ -255,7 +255,7 @@ def delete_post(post_id, user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 # ===================================
@@ -283,7 +283,7 @@ def create_user(username, password, email, profile_pic=None, bio=""):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def verify_user(username, password):
@@ -308,7 +308,7 @@ def verify_user(username, password):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_user(user_id):
@@ -332,7 +332,7 @@ def get_user(user_id):
     finally:
         try:
             c.close()
-        except Exception:  # Fixed: added Exception type
+        except Exception:
             pass
 
 def get_all_users():
@@ -354,7 +354,7 @@ def get_all_users():
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def create_post(user_id, content, media_type=None, media_data=None):
@@ -375,7 +375,7 @@ def create_post(user_id, content, media_type=None, media_data=None):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_posts(user_id=None):
@@ -434,7 +434,7 @@ def get_posts(user_id=None):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_user_posts(user_id):
@@ -458,7 +458,7 @@ def get_user_posts(user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def like_post(user_id, post_id):
@@ -487,7 +487,7 @@ def like_post(user_id, post_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def follow_user(follower_id, following_id):
@@ -516,7 +516,7 @@ def follow_user(follower_id, following_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def unfollow_user(follower_id, following_id):
@@ -531,7 +531,7 @@ def unfollow_user(follower_id, following_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def is_following(follower_id, following_id):
@@ -545,7 +545,7 @@ def is_following(follower_id, following_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def send_message(sender_id, receiver_id, content):
@@ -572,7 +572,7 @@ def send_message(sender_id, receiver_id, content):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_messages(user1_id, user2_id):
@@ -598,7 +598,7 @@ def get_messages(user1_id, user2_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_conversations(user_id):
@@ -631,7 +631,7 @@ def get_conversations(user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def mark_messages_as_read(sender_id, receiver_id):
@@ -644,7 +644,7 @@ def mark_messages_as_read(sender_id, receiver_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_notifications(user_id):
@@ -658,7 +658,7 @@ def get_notifications(user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def mark_notification_as_read(notification_id):
@@ -671,7 +671,7 @@ def mark_notification_as_read(notification_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_followers(user_id):
@@ -690,7 +690,7 @@ def get_followers(user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_following(user_id):
@@ -709,7 +709,7 @@ def get_following(user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_suggested_users(user_id):
@@ -731,7 +731,7 @@ def get_suggested_users(user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 # ===================================
@@ -765,7 +765,7 @@ def create_video_call(caller_id, receiver_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def get_pending_calls(user_id):
@@ -773,7 +773,7 @@ def get_pending_calls(user_id):
         c = conn.cursor()
         c.execute("""
             SELECT id, caller_id, meeting_url, created_at 
-           FROM calls 
+            FROM calls 
             WHERE receiver_id=? AND status='scheduled'
             ORDER BY created_at DESC
         """, (user_id,))
@@ -784,7 +784,7 @@ def get_pending_calls(user_id):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 def update_call_status(call_id, status):
@@ -797,7 +797,7 @@ def update_call_status(call_id, status):
     finally:
         try:
             c.close()
-        except:
+        except Exception:
             pass
 
 # ===================================
@@ -869,7 +869,7 @@ if "user" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = "Feed"
 if "current_chat" not in st.session_state:
-    st.session_state.currentchat = None
+    st.session_state.current_chat = None
 if "message_input" not in st.session_state:
     st.session_state.message_input = ""
 if "last_message_id" not in st.session_state:
@@ -917,6 +917,7 @@ with st.sidebar:
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.user = None
             st.session_state.page = "Feed"
+            st.session_state.current_chat = None
             st.session_state.active_meeting = None
             st.rerun()
     else:
@@ -1058,7 +1059,7 @@ else:
                         elif post[4] == "video":
                             try:
                                 st.video(io.BytesIO(post[5]))
-                            except:
+                            except Exception as e:
                                 st.warning("Unable to display video (corrupted or invalid format)")
                     
                     col1, col2, col3 = st.columns([2, 2, 1])
@@ -1286,7 +1287,7 @@ else:
                                 elif post[4] == "video":
                                     try:
                                         st.video(io.BytesIO(post[5]))
-                                    except:
+                                    except Exception as e:
                                         st.warning("Unable to display video (corrupted or invalid format)")
                             
                             st.write(f"❤️ {post[7]} likes")
@@ -1326,8 +1327,5 @@ else:
                     finally:
                         try:
                             c.close()
-                        except:
+                        except Exception:
                             pass
-
-
-
