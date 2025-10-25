@@ -1894,7 +1894,7 @@ else:
     # ===================================
     
     # Analytics Dashboard
-    elif st.session_state.page == "Analytics":
+    if st.session_state.page == "Analytics":
         st.header("📊 Advanced Analytics")
         
         analytics_tab1, analytics_tab2, analytics_tab3 = st.tabs(["User Analytics", "Business Insights", "Predictive Analytics"])
@@ -2073,8 +2073,158 @@ else:
     # ===================================
     # EXISTING PAGES (Discover, Groups, etc.)
     # ===================================
-    # [All your existing page implementations remain the same]
-    # ... (keeping all your existing page implementations to save space)
+    elif st.session_state.page == "Discover":
+        st.header("🌐 Discover People")
+        
+        discover_tab1, discover_tab2, discover_tab3 = st.tabs(["Suggested Users", "Search People", "Popular Users"])
+        
+        with discover_tab1:
+            st.subheader("People You May Know")
+            
+            suggested_users = get_suggested_users_based_on_interests(user_id, limit=12)
+            if not suggested_users:
+                st.info("No suggested users found. Try searching for specific users instead.")
+            else:
+                # Display users in a grid
+                cols = st.columns(3)
+                for i, user in enumerate(suggested_users):
+                    with cols[i % 3]:
+                        st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                        
+                        # User profile and info
+                        col1, col2 = st.columns([1, 2])
+                        with col1:
+                            if user[2]:  # profile_pic
+                                display_image_safely(user[2], width=60)
+                            else:
+                                st.write("👤")
+                        with col2:
+                            st.write(f"**{user[1]}**")
+                            if user[3]:  # bio
+                                st.caption(user[3][:50] + "..." if len(user[3]) > 50 else user[3])
+                        
+                        # User stats
+                        stats = get_user_stats(user[0])
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.markdown(f'<div class="stats-badge">📝 {stats[0]}</div>', unsafe_allow_html=True)
+                        with col2:
+                            st.markdown(f'<div class="stats-badge">👥 {stats[1]}</div>', unsafe_allow_html=True)
+                        with col3:
+                            st.markdown(f'<div class="stats-badge">🔍 {stats[2]}</div>', unsafe_allow_html=True)
+                        
+                        # Follow button
+                        if is_following(user_id, user[0]):
+                            if st.button("Unfollow", key=f"unfollow_{user[0]}", use_container_width=True):
+                                if unfollow_user(user_id, user[0]):
+                                    st.success(f"Unfollowed {user[1]}")
+                                    st.rerun()
+                        else:
+                            if st.button("Follow", key=f"follow_{user[0]}", use_container_width=True):
+                                if follow_user(user_id, user[0]):
+                                    st.success(f"Started following {user[1]}")
+                                    st.rerun()
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+        
+        with discover_tab2:
+            st.subheader("Search Users")
+            
+            search_query = st.text_input("Search by username or bio", placeholder="Enter name or keywords...")
+            
+            if search_query:
+                search_results = search_users(search_query, user_id)
+                if not search_results:
+                    st.info("No users found matching your search.")
+                else:
+                    st.write(f"Found {len(search_results)} users:")
+                    
+                    for user in search_results:
+                        with st.container():
+                            st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                            col1, col2, col3 = st.columns([1, 3, 1])
+                            
+                            with col1:
+                                if user[2]:  # profile_pic
+                                    display_image_safely(user[2], width=60)
+                                else:
+                                    st.write("👤")
+                            
+                            with col2:
+                                st.write(f"**{user[1]}**")
+                                if user[3]:  # bio
+                                    st.caption(user[3])
+                                # Stats
+                                col_stats1, col_stats2 = st.columns(2)
+                                with col_stats1:
+                                    st.write(f"📝 {user[4]} posts")
+                                with col_stats2:
+                                    st.write(f"👥 {user[5]} followers")
+                            
+                            with col3:
+                                if user[6]:  # is_following
+                                    if st.button("Unfollow", key=f"search_unfollow_{user[0]}", use_container_width=True):
+                                        if unfollow_user(user_id, user[0]):
+                                            st.success(f"Unfollowed {user[1]}")
+                                            st.rerun()
+                                else:
+                                    if st.button("Follow", key=f"search_follow_{user[0]}", use_container_width=True):
+                                        if follow_user(user_id, user[0]):
+                                            st.success(f"Started following {user[1]}")
+                                            st.rerun()
+                            
+                            st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.info("Enter a search term to find users.")
+        
+        with discover_tab3:
+            st.subheader("Popular Users")
+            
+            popular_users = get_users_to_discover(user_id, limit=15)
+            if not popular_users:
+                st.info("No popular users found.")
+            else:
+                # Display popular users with more emphasis on follower count
+                for user in popular_users[:8]:  # Show top 8
+                    with st.container():
+                        st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                        col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
+                        
+                        with col1:
+                            if user[3]:  # profile_pic
+                                display_image_safely(user[3], width=50)
+                            else:
+                                st.write("👤")
+                        
+                        with col2:
+                            st.write(f"**{user[1]}**")
+                            st.caption(f"👥 {user[6]} followers")
+                        
+                        with col3:
+                            st.write(f"📝 {user[5]} posts")
+                            join_date = user[5].split()[0] if user[5] else "Recently"
+                            st.caption(f"Joined {join_date}")
+                        
+                        with col4:
+                            if user[7]:  # is_following
+                                if st.button("Unfollow", key=f"popular_unfollow_{user[0]}", use_container_width=True):
+                                    if unfollow_user(user_id, user[0]):
+                                        st.success(f"Unfollowed {user[1]}")
+                                        st.rerun()
+                            else:
+                                if st.button("Follow", key=f"popular_follow_{user[0]}", use_container_width=True):
+                                    if follow_user(user_id, user[0]):
+                                        st.success(f"Started following {user[1]}")
+                                        st.rerun()
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Add other existing pages here (Groups, Marketplace, Live, Stories, Premium, Feed, Profile, etc.)
+    # ... [Your existing page implementations for Groups, Marketplace, Live, Stories, Premium, Feed, Profile]
+    
+    else:
+        st.header(st.session_state.page)
+        st.info("This page is under development. Check back soon!")
 
 # Close database connection when done
 def close_db():
