@@ -484,6 +484,120 @@ def get_all_users():
             pass
 
 # ===================================
+# DISCOVER PEOPLE FEATURE FUNCTIONS
+# ===================================
+def get_users_to_discover(current_user_id, limit=20):
+    """Get users to discover (excluding current user and already followed users)"""
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT u.id, u.username, u.email, u.profile_pic, u.bio, u.created_at,
+                   COUNT(DISTINCT p.id) as post_count,
+                   COUNT(DISTINCT f1.id) as follower_count,
+                   CASE WHEN f2.id IS NOT NULL THEN 1 ELSE 0 END as is_following
+            FROM users u
+            LEFT JOIN posts p ON u.id = p.user_id AND p.is_deleted = 0
+            LEFT JOIN follows f1 ON u.id = f1.following_id
+            LEFT JOIN follows f2 ON u.id = f2.following_id AND f2.follower_id = ?
+            WHERE u.id != ? AND u.is_active = 1
+            GROUP BY u.id
+            ORDER BY follower_count DESC, post_count DESC
+            LIMIT ?
+        """, (current_user_id, current_user_id, limit))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+def get_suggested_users_based_on_interests(current_user_id, limit=10):
+    """Get suggested users based on similar interests (placeholder implementation)"""
+    try:
+        c = conn.cursor()
+        # This is a simplified version - in a real app, you'd analyze user behavior
+        c.execute("""
+            SELECT u.id, u.username, u.profile_pic, u.bio,
+                   COUNT(DISTINCT p.id) as post_count,
+                   COUNT(DISTINCT f.id) as follower_count
+            FROM users u
+            LEFT JOIN posts p ON u.id = p.user_id AND p.is_deleted = 0
+            LEFT JOIN follows f ON u.id = f.following_id
+            WHERE u.id != ? AND u.is_active = 1
+            AND u.id NOT IN (SELECT following_id FROM follows WHERE follower_id = ?)
+            GROUP BY u.id
+            ORDER BY RANDOM()
+            LIMIT ?
+        """, (current_user_id, current_user_id, limit))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+def search_users(query, current_user_id):
+    """Search users by username or bio"""
+    try:
+        c = conn.cursor()
+        search_term = f"%{query}%"
+        c.execute("""
+            SELECT u.id, u.username, u.profile_pic, u.bio,
+                   COUNT(DISTINCT p.id) as post_count,
+                   COUNT(DISTINCT f.id) as follower_count,
+                   CASE WHEN fl.id IS NOT NULL THEN 1 ELSE 0 END as is_following
+            FROM users u
+            LEFT JOIN posts p ON u.id = p.user_id AND p.is_deleted = 0
+            LEFT JOIN follows f ON u.id = f.following_id
+            LEFT JOIN follows fl ON u.id = fl.following_id AND fl.follower_id = ?
+            WHERE (u.username LIKE ? OR u.bio LIKE ?) 
+            AND u.id != ? AND u.is_active = 1
+            GROUP BY u.id
+            ORDER BY 
+                CASE WHEN u.username LIKE ? THEN 1 ELSE 2 END,
+                follower_count DESC
+        """, (current_user_id, search_term, search_term, current_user_id, search_term))
+        return c.fetchall()
+    except sqlite3.Error as e:
+        st.error(f"Database error: {e}")
+        return []
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+def get_user_stats(user_id):
+    """Get user statistics for profile cards"""
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT 
+                COUNT(DISTINCT p.id) as post_count,
+                COUNT(DISTINCT f1.id) as follower_count,
+                COUNT(DISTINCT f2.id) as following_count
+            FROM users u
+            LEFT JOIN posts p ON u.id = p.user_id AND p.is_deleted = 0
+            LEFT JOIN follows f1 ON u.id = f1.following_id
+            LEFT JOIN follows f2 ON u.id = f2.follower_id
+            WHERE u.id = ?
+        """, (user_id,))
+        return c.fetchone()
+    except sqlite3.Error as e:
+        return (0, 0, 0)
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+# ===================================
 # ENTERPRISE FEATURE: Groups & Communities
 # ===================================
 def create_group(name, description, created_by, cover_image=None, is_public=True):
@@ -1165,6 +1279,20 @@ def apply_theme(dark_mode):
                 text-align: center;
                 color: white;
             }
+            .user-card {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 15px;
+                padding: 20px;
+                margin: 10px 0;
+                color: white;
+            }
+            .stats-badge {
+                background: rgba(255, 255, 255, 0.2);
+                border-radius: 10px;
+                padding: 5px 10px;
+                margin: 2px;
+                font-size: 0.8em;
+            }
             </style>
         """, unsafe_allow_html=True)
     else:
@@ -1210,6 +1338,20 @@ def apply_theme(dark_mode):
                 margin: 10px;
                 text-align: center;
                 color: white;
+            }
+            .user-card {
+                background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+                border-radius: 15px;
+                padding: 20px;
+                margin: 10px 0;
+                color: white;
+            }
+            .stats-badge {
+                background: rgba(255, 255, 255, 0.3);
+                border-radius: 10px;
+                padding: 5px 10px;
+                margin: 2px;
+                font-size: 0.8em;
             }
             </style>
         """, unsafe_allow_html=True)
@@ -1352,9 +1494,173 @@ else:
     user_id = st.session_state.user[0]
     
     # ===================================
+    # DISCOVER PEOPLE FEATURE
+    # ===================================
+    if st.session_state.page == "Discover":
+        st.header("🌐 Discover People")
+        
+        discover_tab1, discover_tab2, discover_tab3 = st.tabs(["Suggested Users", "Search People", "Popular Users"])
+        
+        with discover_tab1:
+            st.subheader("People You May Know")
+            
+            suggested_users = get_suggested_users_based_on_interests(user_id, limit=12)
+            if not suggested_users:
+                st.info("No suggested users found. Try searching for specific users instead.")
+            else:
+                # Display users in a grid
+                cols = st.columns(3)
+                for i, user in enumerate(suggested_users):
+                    with cols[i % 3]:
+                        st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                        
+                        # User profile and info
+                        col1, col2 = st.columns([1, 2])
+                        with col1:
+                            if user[2]:  # profile_pic
+                                display_image_safely(user[2], width=60)
+                            else:
+                                st.write("👤")
+                        with col2:
+                            st.write(f"**{user[1]}**")
+                            if user[3]:  # bio
+                                st.caption(user[3][:50] + "..." if len(user[3]) > 50 else user[3])
+                        
+                        # User stats
+                        stats = get_user_stats(user[0])
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.markdown(f'<div class="stats-badge">📝 {stats[0]}</div>', unsafe_allow_html=True)
+                        with col2:
+                            st.markdown(f'<div class="stats-badge">👥 {stats[1]}</div>', unsafe_allow_html=True)
+                        with col3:
+                            st.markdown(f'<div class="stats-badge">🔍 {stats[2]}</div>', unsafe_allow_html=True)
+                        
+                        # Follow button
+                        if is_following(user_id, user[0]):
+                            if st.button("Unfollow", key=f"unfollow_{user[0]}", use_container_width=True):
+                                if unfollow_user(user_id, user[0]):
+                                    st.success(f"Unfollowed {user[1]}")
+                                    st.rerun()
+                        else:
+                            if st.button("Follow", key=f"follow_{user[0]}", use_container_width=True):
+                                if follow_user(user_id, user[0]):
+                                    st.success(f"Started following {user[1]}")
+                                    st.rerun()
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+        
+        with discover_tab2:
+            st.subheader("Search Users")
+            
+            search_query = st.text_input("Search by username or bio", placeholder="Enter name or keywords...")
+            
+            if search_query:
+                search_results = search_users(search_query, user_id)
+                if not search_results:
+                    st.info("No users found matching your search.")
+                else:
+                    st.write(f"Found {len(search_results)} users:")
+                    
+                    for user in search_results:
+                        with st.container():
+                            st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                            col1, col2, col3 = st.columns([1, 3, 1])
+                            
+                            with col1:
+                                if user[2]:  # profile_pic
+                                    display_image_safely(user[2], width=60)
+                                else:
+                                    st.write("👤")
+                            
+                            with col2:
+                                st.write(f"**{user[1]}**")
+                                if user[3]:  # bio
+                                    st.caption(user[3])
+                                # Stats
+                                col_stats1, col_stats2 = st.columns(2)
+                                with col_stats1:
+                                    st.write(f"📝 {user[4]} posts")
+                                with col_stats2:
+                                    st.write(f"👥 {user[5]} followers")
+                            
+                            with col3:
+                                if user[6]:  # is_following
+                                    if st.button("Unfollow", key=f"search_unfollow_{user[0]}", use_container_width=True):
+                                        if unfollow_user(user_id, user[0]):
+                                            st.success(f"Unfollowed {user[1]}")
+                                            st.rerun()
+                                else:
+                                    if st.button("Follow", key=f"search_follow_{user[0]}", use_container_width=True):
+                                        if follow_user(user_id, user[0]):
+                                            st.success(f"Started following {user[1]}")
+                                            st.rerun()
+                            
+                            st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.info("Enter a search term to find users.")
+        
+        with discover_tab3:
+            st.subheader("Popular Users")
+            
+            popular_users = get_users_to_discover(user_id, limit=15)
+            if not popular_users:
+                st.info("No popular users found.")
+            else:
+                # Display popular users with more emphasis on follower count
+                for user in popular_users[:8]:  # Show top 8
+                    with st.container():
+                        st.markdown("<div class='user-card'>", unsafe_allow_html=True)
+                        col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
+                        
+                        with col1:
+                            if user[3]:  # profile_pic
+                                display_image_safely(user[3], width=50)
+                            else:
+                                st.write("👤")
+                        
+                        with col2:
+                            st.write(f"**{user[1]}**")
+                            st.caption(f"👥 {user[6]} followers")
+                        
+                        with col3:
+                            st.write(f"📝 {user[5]} posts")
+                            join_date = user[5].split()[0] if user[5] else "Recently"
+                            st.caption(f"Joined {join_date}")
+                        
+                        with col4:
+                            if user[7]:  # is_following
+                                if st.button("Unfollow", key=f"popular_unfollow_{user[0]}", use_container_width=True):
+                                    if unfollow_user(user_id, user[0]):
+                                        st.success(f"Unfollowed {user[1]}")
+                                        st.rerun()
+                            else:
+                                if st.button("Follow", key=f"popular_follow_{user[0]}", use_container_width=True):
+                                    if follow_user(user_id, user[0]):
+                                        st.success(f"Started following {user[1]}")
+                                        st.rerun()
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+                
+                # Show remaining users in a compact list
+                if len(popular_users) > 8:
+                    with st.expander("Show More Popular Users"):
+                        for user in popular_users[8:]:
+                            col1, col2, col3 = st.columns([2, 2, 1])
+                            with col1:
+                                st.write(f"**{user[1]}**")
+                            with col2:
+                                st.write(f"👥 {user[6]} followers • 📝 {user[5]} posts")
+                            with col3:
+                                if not user[7]:  # not following
+                                    if st.button("Follow", key=f"more_follow_{user[0]}"):
+                                        if follow_user(user_id, user[0]):
+                                            st.rerun()
+
+    # ===================================
     # ENTERPRISE FEATURE: Groups Page
     # ===================================
-    if st.session_state.page == "Groups":
+    elif st.session_state.page == "Groups":
         st.header("👥 Groups & Communities")
         
         groups_tab1, groups_tab2, groups_tab3 = st.tabs(["My Groups", "Discover Groups", "Create Group"])
@@ -1571,7 +1877,7 @@ else:
             with cols[i]:
                 st.markdown(f"### {plan[1]}")
                 st.write(f"**Monthly:** ${plan[2]}")
-                st.write(f"**Yearly:** ${plan[3]} (Save {int((1 - (plan[3])(plan[2]*12))) * 100)}%)")
+                st.write(f"**Yearly:** ${plan[3]} (Save {int((1 - (plan[3]/(plan[2]*12))) * 100)}%)")
                 
                 features = json.loads(plan[4])
                 st.write("**Features:**")
@@ -1700,4 +2006,3 @@ def close_db():
 # Register cleanup
 import atexit
 atexit.register(close_db)
-
