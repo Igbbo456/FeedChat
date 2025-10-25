@@ -1571,7 +1571,7 @@ else:
             with cols[i]:
                 st.markdown(f"### {plan[1]}")
                 st.write(f"**Monthly:** ${plan[2]}")
-                st.write(f"**Yearly:** ${plan[3]} (Save {int((1 - (plan[3]/(plan[2]*12))) * 100)}%)")
+                st.write(f"**Yearly:** ${plan[3]} (Save {int((1 - (plan[3])(plan[2]*12))) * 100)}%)")
                 
                 features = json.loads(plan[4])
                 st.write("**Features:**")
@@ -1700,3 +1700,4 @@ def close_db():
 # Register cleanup
 import atexit
 atexit.register(close_db)
+
