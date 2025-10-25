@@ -850,6 +850,73 @@ def get_all_users():
             pass
 
 # ===================================
+# MISSING FUNCTION DEFINITIONS - ADDED
+# ===================================
+
+def is_following(follower_id, following_id):
+    """Check if a user is following another user"""
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
+        return c.fetchone() is not None
+    except sqlite3.Error:
+        return False
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+def follow_user(follower_id, following_id):
+    """Follow a user"""
+    try:
+        c = conn.cursor()
+        c.execute("INSERT INTO follows (follower_id, following_id) VALUES (?, ?)", (follower_id, following_id))
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        return False
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+def unfollow_user(follower_id, following_id):
+    """Unfollow a user"""
+    try:
+        c = conn.cursor()
+        c.execute("DELETE FROM follows WHERE follower_id=? AND following_id=?", (follower_id, following_id))
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        return False
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+def get_user_subscription(user_id):
+    """Get user's subscription information"""
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT sp.name, sp.price_monthly, us.status, us.end_date 
+            FROM user_subscriptions us
+            JOIN subscription_plans sp ON us.plan_id = sp.id
+            WHERE us.user_id = ? AND us.status = 'active'
+        """, (user_id,))
+        return c.fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+# ===================================
 # DISCOVER PEOPLE FEATURE FUNCTIONS
 # ===================================
 def get_users_to_discover(current_user_id, limit=20):
@@ -1519,12 +1586,6 @@ def generate_predictive_analytics(user_id):
             c.close()
         except Exception:
             pass
-
-# ===================================
-# EXISTING FUNCTIONS (Groups, E-commerce, etc.)
-# ===================================
-# [All your existing functions for groups, e-commerce, stories, live streaming, etc. remain the same]
-# ... (keeping all your existing functions to save space)
 
 # ===================================
 # Streamlit UI - ENTERPRISE EDITION
