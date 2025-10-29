@@ -2165,6 +2165,8 @@ def profile_page():
     
     user = get_user(st.session_state.user_id)
     if user:
+        # Fix: Properly unpack the user tuple based on what get_user() returns
+        # get_user returns: (id, username, email, profile_pic, bio)
         user_id, username, email, profile_pic, bio = user
         
         col1, col2 = st.columns([1, 3])
@@ -2184,7 +2186,11 @@ def profile_page():
             # Subscription info
             subscription = get_user_subscription(st.session_state.user_id)
             if subscription:
-                st.success(f"🎉 Premium Member ({subscription[7]})")
+                # Fix: Check subscription tuple structure before accessing indices
+                if len(subscription) > 7:
+                    st.success(f"🎉 Premium Member ({subscription[7]})")
+                else:
+                    st.success("🎉 Premium Member")
             else:
                 st.info("🔓 Free Account")
     
