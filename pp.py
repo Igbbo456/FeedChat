@@ -2163,52 +2163,98 @@ def profile_page():
     """User profile page"""
     st.title("👤 Your Profile")
     
-    user = get_user(st.session_state.user_id)
-    if user:
-        # Fix: Properly unpack the user tuple based on what get_user() returns
-        # get_user returns: (id, username, email, profile_pic, bio)
-        user_id, username, email, profile_pic, bio = user
+    # Check if user is logged in
+    if not st.session_state.get('logged_in') or not st.session_state.get('user_id'):
+        st.error("Please log in to view your profile.")
+        return
+    
+    try:
+        user = get_user(st.session_state.user_id)
+        if not user:
+            st.error("User profile not found.")
+            return
+            
+        # Safely unpack user data with fallback values
+        try:
+            if len(user) >= 5:
+                user_id, username, email, profile_pic, bio = user
+            else:
+                # Handle case where user tuple has fewer elements
+                user_id = user[0] if len(user) > 0 else st.session_state.user_id
+                username = user[1] if len(user) > 1 else st.session_state.get('username', 'Unknown User')
+                email = user[2] if len(user) > 2 else "No email"
+                profile_pic = user[3] if len(user) > 3 else None
+                bio = user[4] if len(user) > 4 else ""
+        except Exception as unpack_error:
+            st.error(f"Error unpacking user data: {unpack_error}")
+            # Use fallback values
+            username = st.session_state.get('username', 'Unknown User')
+            email = "No email"
+            profile_pic = None
+            bio = ""
         
+        # Display profile information
         col1, col2 = st.columns([1, 3])
         
         with col1:
-            if profile_pic and is_valid_image(profile_pic):
-                st.image(io.BytesIO(profile_pic), width=150)
-            else:
+            try:
+                if profile_pic and is_valid_image(profile_pic):
+                    st.image(io.BytesIO(profile_pic), width=150)
+                else:
+                    st.image("👤", width=150)
+            except Exception as img_error:
+                st.error(f"Error displaying profile picture: {img_error}")
                 st.image("👤", width=150)
         
         with col2:
             st.subheader(username)
-            st.write(f"Email: {email}")
-            if bio:
-                st.write(f"Bio: {bio}")
+            st.write(f"**Email:** {email}")
+            if bio and bio.strip():
+                st.write(f"**Bio:** {bio}")
             
-            # Subscription info
-            subscription = get_user_subscription(st.session_state.user_id)
-            if subscription:
-                # Fix: Check subscription tuple structure before accessing indices
-                if len(subscription) > 7:
-                    st.success(f"🎉 Premium Member ({subscription[7]})")
+            # Subscription info with error handling
+            try:
+                subscription = get_user_subscription(st.session_state.user_id)
+                if subscription:
+                    # Safely access subscription data
+                    plan_name = "Premium"
+                    if len(subscription) > 7 and subscription[7]:
+                        plan_name = subscription[7]
+                    elif len(subscription) > 8 and subscription[8]:  # Try different index
+                        plan_name = subscription[8]
+                    st.success(f"🎉 {plan_name} Member")
                 else:
-                    st.success("🎉 Premium Member")
-            else:
+                    st.info("🔓 Free Account")
+            except Exception as sub_error:
+                st.error(f"Error loading subscription: {sub_error}")
                 st.info("🔓 Free Account")
     
-    # User achievements
+    except Exception as e:
+        st.error(f"Error loading profile: {str(e)}")
+        st.info("Please try refreshing the page or contact support if the problem persists.")
+        return
+    
+    # User achievements section
     st.subheader("🏆 Achievements")
-    # Implementation for displaying user achievements would go here
-    st.info("Your achievements will appear here")
+    try:
+        # Implementation for displaying user achievements would go here
+        st.info("Your achievements will appear here")
+    except Exception as e:
+        st.error(f"Error loading achievements: {str(e)}")
     
-    # User stats
+    # User stats section
     st.subheader("📊 Your Stats")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Posts", "0")  # Would implement post count
-    with col2:
-        st.metric("Followers", "0")  # Would implement follower count
-    with col3:
-        st.metric("Following", "0")  # Would implement following count
+    try:
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Posts", "0")  # Would implement post count
+        with col2:
+            st.metric("Followers", "0")  # Would implement follower count
+        with col3:
+            st.metric("Following", "0")  # Would implement following count
+    except Exception as e:
+        st.error(f"Error loading stats: {str(e)}")
 
 def stories_page():
     """Stories page"""
