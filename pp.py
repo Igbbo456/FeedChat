@@ -108,7 +108,7 @@ def init_db():
         name TEXT,
         description TEXT,
         price DECIMAL(10,2),
-        images JSON,
+        images TEXT,
         category TEXT,
         is_available BOOLEAN DEFAULT TRUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -186,7 +186,7 @@ def init_db():
         name TEXT,
         price_monthly DECIMAL(10,2),
         price_yearly DECIMAL(10,2),
-        features JSON,
+        features TEXT,
         is_active BOOLEAN DEFAULT TRUE
     )
     """)
@@ -211,7 +211,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         event_type TEXT,
-        event_data JSON,
+        event_data TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -344,7 +344,7 @@ def init_db():
         content TEXT,
         media_data BLOB,
         scheduled_time DATETIME,
-        platforms JSON,
+        platforms TEXT,
         status TEXT DEFAULT 'scheduled',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -356,7 +356,7 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         host_id INTEGER,
         meeting_topic TEXT,
-        participant_ids JSON,
+        participant_ids TEXT,
         start_time DATETIME,
         end_time DATETIME,
         recording_url TEXT,
@@ -406,7 +406,7 @@ def init_db():
         user_id INTEGER,
         api_key TEXT UNIQUE,
         name TEXT,
-        permissions JSON,
+        permissions TEXT,
         is_active BOOLEAN DEFAULT TRUE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -710,12 +710,12 @@ def init_db():
     # Insert default achievements
     try:
         c.execute("""
-            INSERT OR IGNORE INTO user_achievements (achievement_type, achievement_level, points_earned) 
+            INSERT OR IGNORE INTO user_achievements (user_id, achievement_type, achievement_level, points_earned) 
             VALUES 
-            ('first_post', 1, 10),
-            ('social_butterfly', 1, 50),
-            ('content_creator', 1, 100),
-            ('influencer', 1, 500)
+            (1, 'first_post', 1, 10),
+            (1, 'social_butterfly', 1, 50),
+            (1, 'content_creator', 1, 100),
+            (1, 'influencer', 1, 500)
         """)
     except:
         pass
@@ -735,6 +735,9 @@ def is_valid_image(image_data):
     try:
         if image_data is None:
             return False
+        if isinstance(image_data, str):
+            # Handle base64 encoded images
+            image_data = base64.b64decode(image_data)
         image = Image.open(io.BytesIO(image_data))
         image.verify()
         return True
@@ -744,15 +747,20 @@ def is_valid_image(image_data):
 def display_image_safely(image_data, caption="", width=None, use_container_width=False):
     """Safely display an image with error handling"""
     try:
-        if image_data and is_valid_image(image_data):
-            if width:
-                st.image(io.BytesIO(image_data), caption=caption, width=width)
-            elif use_container_width:
-                st.image(io.BytesIO(image_data), caption=caption, use_container_width=True)
+        if image_data:
+            if isinstance(image_data, str):
+                # Handle base64 encoded images
+                image_data = base64.b64decode(image_data)
+            
+            if is_valid_image(image_data):
+                if width:
+                    st.image(io.BytesIO(image_data), caption=caption, width=width)
+                elif use_container_width:
+                    st.image(io.BytesIO(image_data), caption=caption, use_container_width=True)
+                else:
+                    st.image(io.BytesIO(image_data), caption=caption)
             else:
-                st.image(io.BytesIO(image_data), caption=caption)
-        else:
-            st.warning("Unable to display image (corrupted or invalid format)")
+                st.warning("Unable to display image (corrupted or invalid format)")
     except Exception as e:
         st.warning(f"Error displaying image: {str(e)}")
 
@@ -1245,14 +1253,28 @@ def get_group_posts(group_id, limit=20):
             pass
 
 # ===================================
-# MARKETPLACE FUNCTIONS
+# MARKETPLACE FUNCTIONS - FIXED
 # ===================================
 
 def create_product(seller_id, name, description, price, category, images=None):
     """Create a new product"""
     try:
         c = conn.cursor()
-        images_json = json.dumps(images) if images else "[]"
+        
+        # Convert image bytes to base64 strings for JSON serialization
+        processed_images = []
+        if images:
+            for image_data in images:
+                if isinstance(image_data, bytes):
+                    # Convert bytes to base64 string
+                    base64_image = base64.b64encode(image_data).decode('utf-8')
+                    processed_images.append(base64_image)
+                else:
+                    # If it's already a string or other type, use as-is
+                    processed_images.append(image_data)
+        
+        images_json = json.dumps(processed_images) if processed_images else "[]"
+        
         c.execute("""
             INSERT INTO products (seller_id, name, description, price, category, images) 
             VALUES (?, ?, ?, ?, ?, ?)
@@ -1695,14 +1717,21 @@ def award_achievement(user_id, achievement_type):
         c.execute("""
             SELECT achievement_level, points_earned 
             FROM user_achievements 
-            WHERE achievement_type = ?
+            WHERE achievement_type = ? AND user_id = ?
             ORDER BY achievement_level DESC 
             LIMIT 1
-        """, (achievement_type,))
+        """, (achievement_type, user_id))
         
         achievement = c.fetchone()
         if not achievement:
-            return False
+            # Insert default achievement
+            c.execute("""
+                INSERT INTO user_achievements 
+                (user_id, achievement_type, achievement_level, points_earned) 
+                VALUES (?, ?, ?, ?)
+            """, (user_id, achievement_type, 1, 10))
+            conn.commit()
+            return True
             
         achievement_level = achievement[0]
         points_earned = achievement[1]
@@ -1800,6 +1829,7 @@ def login_page():
                     st.session_state.username = user[1]
                     st.session_state.logged_in = True
                     st.success(f"Welcome back, {user[1]}!")
+                    time.sleep(1)
                     st.rerun()
                 else:
                     st.error("Invalid username or password")
@@ -1859,6 +1889,8 @@ def main_feed():
                 st.success("Post created successfully!")
                 # Award achievement for first post
                 award_achievement(st.session_state.user_id, "first_post")
+                time.sleep(1)
+                st.rerun()
             else:
                 st.error("Failed to create post")
     
@@ -1884,7 +1916,7 @@ def main_feed():
                 if profile_pic and is_valid_image(profile_pic):
                     st.image(io.BytesIO(profile_pic), width=50)
                 else:
-                    st.image("👤", width=50)
+                    st.write("👤")
             
             with col2:
                 st.write(f"**{username}**")
@@ -1915,7 +1947,11 @@ def main_feed():
             
             with col2:
                 if st.button("💬", key=f"comment_{post_id}"):
-                    st.session_state.current_post = post_id
+                    if 'current_post' in st.session_state and st.session_state.current_post == post_id:
+                        del st.session_state.current_post
+                    else:
+                        st.session_state.current_post = post_id
+                    st.rerun()
             
             with col3:
                 saved = is_saved(st.session_state.user_id, post_id)
@@ -1932,6 +1968,7 @@ def main_feed():
                 if st.button("🔄", key=f"share_{post_id}"):
                     share_post(st.session_state.user_id, post_id)
                     st.success("Post shared!")
+                    st.rerun()
             
             # Comments section
             if hasattr(st.session_state, 'current_post') and st.session_state.current_post == post_id:
@@ -1955,7 +1992,7 @@ def main_feed():
                         if comment_profile_pic and is_valid_image(comment_profile_pic):
                             st.image(io.BytesIO(comment_profile_pic), width=30)
                         else:
-                            st.image("👤", width=30)
+                            st.write("👤")
                     
                     with col2:
                         st.write(f"**{comment_username}**")
@@ -1995,15 +2032,14 @@ def marketplace_page():
                     st.write(description[:100] + "..." if len(description) > 100 else description)
                     
                     # Display product images
-                    if images_json:
+                    if images_json and images_json != "[]":
                         try:
                             images = json.loads(images_json)
                             if images and len(images) > 0:
                                 # For simplicity, display first image
-                                if is_valid_image(images[0]):
-                                    display_image_safely(images[0], width=200)
-                        except:
-                            pass
+                                display_image_safely(images[0], width=200)
+                        except Exception as e:
+                            st.warning("Could not load product image")
                     
                     # Purchase form
                     with st.form(f"purchase_{product_id}"):
@@ -2029,9 +2065,9 @@ def marketplace_page():
                 if name and description and price:
                     image_data_list = []
                     for img in images:
-                        if is_valid_image(img.read()):
-                            img.seek(0)  # Reset file pointer
-                            image_data_list.append(img.read())
+                        image_bytes = img.read()
+                        if is_valid_image(image_bytes):
+                            image_data_list.append(image_bytes)
                     
                     product_id = create_product(st.session_state.user_id, name, description, price, category, image_data_list)
                     if product_id:
@@ -2069,7 +2105,7 @@ def groups_page():
                         if cover_image and is_valid_image(cover_image):
                             st.image(io.BytesIO(cover_image), width=80)
                         else:
-                            st.image("🏢", width=80)
+                            st.write("🏢")
                     
                     with col2:
                         st.subheader(name)
@@ -2129,9 +2165,10 @@ def messaging_page():
             for conv in conversations:
                 other_user_id, username, profile_pic, last_message_time, last_message = conv
                 
-                if st.button(f"{username}: {last_message[:30]}...", key=f"conv_{other_user_id}"):
+                if st.button(f"{username}: {last_message[:30] if last_message else 'No messages'}...", key=f"conv_{other_user_id}"):
                     st.session_state.current_chat = other_user_id
                     st.session_state.chat_username = username
+                    st.rerun()
     
     with col2:
         if hasattr(st.session_state, 'current_chat'):
@@ -2201,10 +2238,10 @@ def profile_page():
                 if profile_pic and is_valid_image(profile_pic):
                     st.image(io.BytesIO(profile_pic), width=150)
                 else:
-                    st.image("👤", width=150)
+                    st.write("👤")
             except Exception as img_error:
                 st.error(f"Error displaying profile picture: {img_error}")
-                st.image("👤", width=150)
+                st.write("👤")
         
         with col2:
             st.subheader(username)
@@ -2276,7 +2313,7 @@ def stories_page():
             if profile_pic and is_valid_image(profile_pic):
                 st.image(io.BytesIO(profile_pic), width=80)
             else:
-                st.image("👤", width=80)
+                st.write("👤")
             
             st.write(username)
             
@@ -2347,7 +2384,7 @@ def live_streams_page():
                 if profile_pic and is_valid_image(profile_pic):
                     st.image(io.BytesIO(profile_pic), width=80)
                 else:
-                    st.image("👤", width=80)
+                    st.write("👤")
                 st.write(f"**LIVE** - {viewer_count} viewers")
             
             with col2:
@@ -2387,9 +2424,12 @@ def premium_page():
                 st.write(f"or ${price_yearly}/year")
             
             try:
-                features = json.loads(features_json)
-                for feature in features:
-                    st.write(f"✓ {feature}")
+                if features_json:
+                    features = json.loads(features_json)
+                    for feature in features:
+                        st.write(f"✓ {feature}")
+                else:
+                    st.write("Basic features included")
             except:
                 st.write("Basic features included")
             
@@ -2440,14 +2480,14 @@ def recommendations_page():
                 if profile_pic and is_valid_image(profile_pic):
                     st.image(io.BytesIO(profile_pic), width=60)
                 else:
-                    st.image("👤", width=60)
+                    st.write("👤")
             
             with col2:
                 st.write(f"**{username}**")
                 if bio:
                     st.write(bio[:100] + "..." if len(bio) > 100 else bio)
-                st.progress(score)
-                st.caption(f"Match score: {score:.0%} • {reason}")
+                st.progress(float(score))
+                st.caption(f"Match score: {float(score)*100:.0f}% • {reason}")
             
             st.markdown("---")
 
