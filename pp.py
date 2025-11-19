@@ -48,7 +48,7 @@ def format_global_time(timestamp):
 def optimize_image_for_web(image_data, max_size=(1200, 1200), quality=85):
     """Optimize images for fast global loading"""
     try:
-        if image_data:
+        if image_data and isinstance(image_data, bytes):
             image = Image.open(io.BytesIO(image_data))
             image.thumbnail(max_size, Image.Resampling.LANCZOS)
             
@@ -166,6 +166,8 @@ def is_valid_image(image_data):
             return False
         if isinstance(image_data, str):
             image_data = base64.b64decode(image_data)
+        if not isinstance(image_data, bytes):
+            return False
         image = Image.open(io.BytesIO(image_data))
         image.verify()
         return True
@@ -179,6 +181,10 @@ def display_image_safely(image_data, caption="", width=None, use_container_width
             if isinstance(image_data, str):
                 image_data = base64.b64decode(image_data)
             
+            if not isinstance(image_data, bytes):
+                st.warning("Invalid image format")
+                return
+                
             if is_valid_image(image_data):
                 if width:
                     st.image(io.BytesIO(image_data), caption=caption, width=width)
@@ -187,9 +193,21 @@ def display_image_safely(image_data, caption="", width=None, use_container_width
                 else:
                     st.image(io.BytesIO(image_data), caption=caption)
             else:
-                st.warning("Unable to display image")
+                st.warning("Unable to display image: Invalid image data")
     except Exception as e:
         st.warning(f"Error displaying image: {str(e)}")
+
+def validate_password_strength(password):
+    """Validate password strength"""
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter"
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter"
+    if not re.search(r"\d", password):
+        return False, "Password must contain at least one number"
+    return True, "Password is strong"
 
 def hash_password(password):
     """Secure password hashing"""
@@ -214,6 +232,16 @@ def create_user_secure(username, password, email, profile_pic=None, bio="", loca
         c.execute("SELECT id FROM users WHERE username=?", (username,))
         if c.fetchone():
             return False, "Username already exists"
+        
+        # Check if email exists
+        c.execute("SELECT id FROM users WHERE email=?", (email,))
+        if c.fetchone():
+            return False, "Email already registered"
+        
+        # Validate password strength
+        is_valid, msg = validate_password_strength(password)
+        if not is_valid:
+            return False, msg
         
         # Validate profile picture
         if profile_pic and not is_valid_image(profile_pic):
@@ -271,9 +299,71 @@ def get_user(user_id):
     except sqlite3.Error:
         return None
 
+def update_user_profile(user_id, email=None, bio=None, location=None, timezone=None, language=None, profile_pic=None):
+    """Update user profile"""
+    try:
+        c = conn.cursor()
+        
+        # Build dynamic update query
+        updates = []
+        params = []
+        
+        if email is not None:
+            updates.append("email = ?")
+            params.append(email)
+        if bio is not None:
+            updates.append("bio = ?")
+            params.append(bio)
+        if location is not None:
+            updates.append("location = ?")
+            params.append(location)
+        if timezone is not None:
+            updates.append("timezone = ?")
+            params.append(timezone)
+        if language is not None:
+            updates.append("language = ?")
+            params.append(language)
+        if profile_pic is not None:
+            if profile_pic == "":  # Empty string means remove profile pic
+                updates.append("profile_pic = NULL")
+            else:
+                updates.append("profile_pic = ?")
+                params.append(profile_pic)
+        
+        if not updates:
+            return False, "No fields to update"
+        
+        params.append(user_id)
+        query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
+        
+        c.execute(query, params)
+        conn.commit()
+        
+        # Update session state if location changed
+        if location is not None:
+            st.session_state.location = location
+        
+        return True, "Profile updated successfully"
+    except sqlite3.Error as e:
+        return False, f"Database error: {e}"
+
+def validate_post_content(content):
+    """Validate post content"""
+    if not content or len(content.strip()) == 0:
+        return False, "Post content cannot be empty"
+    if len(content) > 10000:
+        return False, "Post content too long (max 10,000 characters)"
+    return True, "Content is valid"
+
 def create_global_post(user_id, content, media_data=None, media_type=None, location="Unknown", language="en", visibility="public"):
     """Create post with global reach capabilities"""
     try:
+        # Validate content
+        is_valid, msg = validate_post_content(content)
+        if not is_valid:
+            st.error(msg)
+            return None
+            
         c = conn.cursor()
         
         # Optimize media for web
@@ -341,16 +431,40 @@ def like_post(user_id, post_id):
     except sqlite3.Error:
         return False
 
-def add_comment(post_id, user_id, content):
-    """Add a comment to a post"""
+def unlike_post(user_id, post_id):
+    """Unlike a post"""
     try:
         c = conn.cursor()
-        c.execute("INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)",
-                 (post_id, user_id, content))
+        c.execute("DELETE FROM likes WHERE user_id = ? AND post_id = ?", (user_id, post_id))
         conn.commit()
         return True
     except sqlite3.Error:
         return False
+
+def has_liked_post(user_id, post_id):
+    """Check if user has liked a post"""
+    try:
+        c = conn.cursor()
+        c.execute("SELECT id FROM likes WHERE user_id = ? AND post_id = ?", (user_id, post_id))
+        return c.fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+def add_comment(post_id, user_id, content):
+    """Add a comment to a post"""
+    try:
+        if not content or len(content.strip()) == 0:
+            return False, "Comment cannot be empty"
+        if len(content) > 1000:
+            return False, "Comment too long (max 1000 characters)"
+            
+        c = conn.cursor()
+        c.execute("INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)",
+                 (post_id, user_id, content))
+        conn.commit()
+        return True, "Comment added successfully"
+    except sqlite3.Error:
+        return False, "Failed to add comment"
 
 def get_comments(post_id):
     """Get comments for a post"""
@@ -367,9 +481,53 @@ def get_comments(post_id):
     except sqlite3.Error:
         return []
 
+def delete_post(post_id, user_id):
+    """Delete a post (soft delete)"""
+    try:
+        c = conn.cursor()
+        c.execute("UPDATE posts SET is_deleted = 1 WHERE id = ? AND user_id = ?", (post_id, user_id))
+        conn.commit()
+        return c.rowcount > 0
+    except sqlite3.Error:
+        return False
+
+def edit_post(post_id, user_id, new_content):
+    """Edit a post"""
+    try:
+        is_valid, msg = validate_post_content(new_content)
+        if not is_valid:
+            return False, msg
+            
+        c = conn.cursor()
+        c.execute("UPDATE posts SET content = ? WHERE id = ? AND user_id = ?", 
+                 (new_content, post_id, user_id))
+        conn.commit()
+        return c.rowcount > 0, "Post updated successfully"
+    except sqlite3.Error as e:
+        return False, f"Database error: {e}"
+
+def mark_messages_as_read(user_id, other_user_id):
+    """Mark messages as read when viewed"""
+    try:
+        c = conn.cursor()
+        c.execute("""
+            UPDATE messages 
+            SET is_read = 1 
+            WHERE receiver_id = ? AND sender_id = ? AND is_read = 0
+        """, (user_id, other_user_id))
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        return False
+
 def send_global_message(sender_id, receiver_id, content, message_type='text', media_data=None):
     """Send message globally"""
     try:
+        if not content or len(content.strip()) == 0:
+            return False, "Message cannot be empty"
+        if len(content) > 5000:
+            return False, "Message too long (max 5000 characters)"
+            
         c = conn.cursor()
         
         # Optimize media if present
@@ -383,10 +541,9 @@ def send_global_message(sender_id, receiver_id, content, message_type='text', me
         """, (sender_id, receiver_id, content, message_type, media_data))
         
         conn.commit()
-        return True
+        return True, "Message sent successfully"
     except sqlite3.Error as e:
-        st.error(f"Message sending failed: {e}")
-        return False
+        return False, f"Message sending failed: {e}"
 
 def get_global_messages(user_id, other_user_id, limit=50):
     """Get messages between users"""
@@ -540,6 +697,12 @@ def inject_custom_css():
         background-clip: text;
         font-weight: 800;
     }
+    .danger-button {
+        background-color: #da3633 !important;
+    }
+    .danger-button:hover {
+        background-color: #f85149 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -563,6 +726,13 @@ def login_page():
                         st.session_state.user_id = user_id
                         st.session_state.username = username
                         st.session_state.logged_in = True
+                        
+                        # Get user data and store in session
+                        user_data = get_user(user_id)
+                        if user_data:
+                            st.session_state.location = user_data[5]  # location
+                            st.session_state.timezone = user_data[6]  # timezone
+                        
                         st.success(f"🎉 Welcome, {username}!")
                         time.sleep(1)
                         st.rerun()
@@ -648,6 +818,8 @@ def global_feed_page():
                     if post_id:
                         st.success("🌍 Post published!")
                         st.rerun()
+                else:
+                    st.error("Please enter some content for your post")
     
     # Display posts
     st.markdown("### 📰 Recent Posts from Around the World")
@@ -692,11 +864,16 @@ def display_post_card(post):
                 st.video(io.BytesIO(media_data))
         
         # Engagement buttons
-        col1, col2 = st.columns(2)
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
         
         with col1:
-            if st.button(f"❤️ {like_count}", key=f"like_{post_id}"):
-                like_post(st.session_state.user_id, post_id)
+            has_liked = has_liked_post(st.session_state.user_id, post_id)
+            like_text = "💔 Unlike" if has_liked else "❤️ Like"
+            if st.button(f"{like_text} {like_count}", key=f"like_{post_id}"):
+                if has_liked:
+                    unlike_post(st.session_state.user_id, post_id)
+                else:
+                    like_post(st.session_state.user_id, post_id)
                 st.rerun()
         
         with col2:
@@ -707,20 +884,65 @@ def display_post_card(post):
                     st.session_state.current_post = post_id
                 st.rerun()
         
+        # Post owner actions
+        if user_id == st.session_state.user_id:
+            with col3:
+                if st.button("✏️", key=f"edit_{post_id}"):
+                    st.session_state.editing_post = post_id
+                    st.rerun()
+            
+            with col4:
+                if st.button("🗑️", key=f"delete_{post_id}"):
+                    if delete_post(post_id, user_id):
+                        st.success("Post deleted!")
+                        st.rerun()
+                    else:
+                        st.error("Failed to delete post")
+        
+        # Edit post form
+        if hasattr(st.session_state, 'editing_post') and st.session_state.editing_post == post_id:
+            with st.form(f"edit_post_{post_id}"):
+                edited_content = st.text_area("Edit your post:", value=content, height=100)
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.form_submit_button("💾 Save"):
+                        success, message = edit_post(post_id, user_id, edited_content)
+                        if success:
+                            st.success("Post updated!")
+                            del st.session_state.editing_post
+                            st.rerun()
+                        else:
+                            st.error(message)
+                with col2:
+                    if st.form_submit_button("❌ Cancel"):
+                        del st.session_state.editing_post
+                        st.rerun()
+        
         # Comments section
         if hasattr(st.session_state, 'current_post') and st.session_state.current_post == post_id:
             st.markdown("---")
-            with st.form(f"comment_{post_id}"):
+            with st.form(f"comment_form_{post_id}"):
                 comment = st.text_input("💭 Add a comment...")
                 if st.form_submit_button("💬 Comment"):
                     if comment:
-                        add_comment(post_id, st.session_state.user_id, comment)
-                        st.rerun()
+                        success, message = add_comment(post_id, st.session_state.user_id, comment)
+                        if success:
+                            st.rerun()
+                        else:
+                            st.error(message)
             
             comments = get_comments(post_id)
-            for comment in comments:
-                _, _, user_id, content, created_at, username, _ = comment
-                st.markdown(f"**{username}**: {content}")
+            if comments:
+                st.markdown("**Comments:**")
+                for comment in comments:
+                    comment_id, _, comment_user_id, comment_content, comment_created_at, comment_username, comment_profile_pic = comment
+                    col1, col2 = st.columns([1, 4])
+                    with col1:
+                        if comment_profile_pic and is_valid_image(comment_profile_pic):
+                            st.image(io.BytesIO(comment_profile_pic), width=30)
+                    with col2:
+                        st.markdown(f"**{comment_username}**: {comment_content}")
+                        st.caption(f"_{format_global_time(comment_created_at)}_")
 
 def messaging_page():
     """Messaging page"""
@@ -763,7 +985,7 @@ def display_chat_interface():
                 
                 btn_text = f"{username} ({location})"
                 if unread > 0:
-                    btn_text = f"🔔 {btn_text}"
+                    btn_text = f"🔔 {btn_text} ({unread})"
                 
                 if st.button(btn_text, key=f"conv_{other_user_id}", use_container_width=True):
                     st.session_state.current_chat = other_user_id
@@ -774,14 +996,18 @@ def display_chat_interface():
         if hasattr(st.session_state, 'current_chat'):
             display_chat_messages()
         else:
-            st.info("💬 Select a conversation")
+            st.info("💬 Select a conversation to start chatting")
 
 def display_chat_messages():
     """Display chat messages"""
     st.markdown(f"### 💬 Chat with {st.session_state.chat_username}")
     
+    # Mark messages as read when viewing
+    mark_messages_as_read(st.session_state.user_id, st.session_state.current_chat)
+    
     messages = get_global_messages(st.session_state.user_id, st.session_state.current_chat)
     
+    # Display messages
     for msg in messages:
         msg_id, sender_id, receiver_id, content, msg_type, media_data, is_read, created_at, sender_name = msg
         
@@ -795,6 +1021,9 @@ def display_chat_messages():
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
+            if media_data and msg_type == 'image':
+                display_image_safely(media_data, width=200)
         else:
             # Received message
             st.markdown(f"""
@@ -806,6 +1035,9 @@ def display_chat_messages():
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
+            if media_data and msg_type == 'image':
+                display_image_safely(media_data, width=200)
     
     # Send message
     st.markdown("---")
@@ -819,15 +1051,26 @@ def display_chat_messages():
                 msg_type = 'image' if media_file else 'text'
                 content = message if message else "📸 Shared an image"
                 
-                if send_global_message(st.session_state.user_id, st.session_state.current_chat, content, msg_type, media_data):
+                success, result = send_global_message(
+                    st.session_state.user_id, st.session_state.current_chat, 
+                    content, msg_type, media_data
+                )
+                
+                if success:
                     st.rerun()
+                else:
+                    st.error(result)
+            else:
+                st.error("Please enter a message or attach an image")
 
 def display_user_directory():
     """Display user directory"""
     st.markdown("### 👥 Global Users")
     
     search = st.text_input("🔍 Search users...")
-    users = get_global_users(search_term=search)
+    location_filter = st.text_input("📍 Filter by location...")
+    
+    users = get_global_users(search_term=search, location_filter=location_filter)
     
     if not users:
         st.info("👥 No users found")
@@ -844,8 +1087,8 @@ def display_user_directory():
                     st.write("👤")
             
             with col2:
-                online = "🟢" if is_online else "⚫"
-                st.write(f"**{online} {username}**")
+                online_status = "🟢 Online" if is_online else "⚫ Offline"
+                st.write(f"**{username}** - {online_status}")
                 st.write(f"📍 {location} · 🗣️ {language}")
                 if bio:
                     st.write(bio[:50] + "..." if len(bio) > 50 else bio)
@@ -859,7 +1102,7 @@ def display_user_directory():
             st.markdown("---")
 
 def profile_page():
-    """Profile page"""
+    """Profile page with edit functionality"""
     st.markdown("<h1 class='gradient-text'>👤 Your Profile</h1>", unsafe_allow_html=True)
     
     user = get_user(st.session_state.user_id)
@@ -891,6 +1134,50 @@ def profile_page():
             
             status = "🟢 Online" if is_online else "⚫ Offline"
             st.write(f"**Status:** {status}")
+            st.write(f"**Last seen:** {format_global_time(last_seen)}")
+    
+    # Edit profile section
+    st.markdown("---")
+    st.markdown("### ✏️ Edit Profile")
+    
+    with st.form("edit_profile"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            new_email = st.text_input("📧 Email", value=email)
+            new_bio = st.text_area("📝 Bio", value=bio if bio else "", height=100)
+            new_location = st.text_input("📍 Location", value=location)
+        
+        with col2:
+            new_timezone = st.selectbox("🌐 Timezone", CLOUD_CONFIG["supported_timezones"], 
+                                      index=CLOUD_CONFIG["supported_timezones"].index(timezone) if timezone in CLOUD_CONFIG["supported_timezones"] else 0)
+            new_language = st.selectbox("🗣️ Language", CLOUD_CONFIG["languages"], 
+                                      index=CLOUD_CONFIG["languages"].index(language) if language in CLOUD_CONFIG["languages"] else 0)
+            new_profile_pic = st.file_uploader("🖼️ Update Profile Picture", type=['jpg', 'png', 'jpeg'])
+            remove_pic = st.checkbox("Remove current profile picture")
+        
+        if st.form_submit_button("💾 Update Profile"):
+            profile_pic_data = None
+            if remove_pic:
+                profile_pic_data = ""
+            elif new_profile_pic:
+                profile_pic_data = new_profile_pic.read()
+            
+            success, message = update_user_profile(
+                st.session_state.user_id,
+                email=new_email,
+                bio=new_bio,
+                location=new_location,
+                timezone=new_timezone,
+                language=new_language,
+                profile_pic=profile_pic_data
+            )
+            
+            if success:
+                st.success("Profile updated successfully!")
+                st.rerun()
+            else:
+                st.error(message)
 
 # ===================================
 # MAIN APPLICATION
@@ -902,13 +1189,22 @@ def main():
     # Inject custom CSS
     inject_custom_css()
     
-    # Initialize session state
-    if 'logged_in' not in st.session_state:
-        st.session_state.logged_in = False
-    if 'user_id' not in st.session_state:
-        st.session_state.user_id = None
-    if 'username' not in st.session_state:
-        st.session_state.username = None
+    # Initialize ALL session state variables
+    default_states = {
+        'logged_in': False,
+        'user_id': None,
+        'username': None,
+        'current_chat': None,
+        'chat_username': None,
+        'current_post': None,
+        'editing_post': None,
+        'location': 'Unknown',
+        'timezone': 'UTC'
+    }
+    
+    for key, default in default_states.items():
+        if key not in st.session_state:
+            st.session_state[key] = default
     
     # App header
     st.sidebar.markdown("<h1 class='gradient-text'>🌍 Global Social</h1>", unsafe_allow_html=True)
@@ -943,9 +1239,10 @@ def main():
         except:
             pass
         
-        st.session_state.logged_in = False
-        st.session_state.user_id = None
-        st.session_state.username = None
+        # Clear all session state
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        
         st.rerun()
     
     # Display selected page
