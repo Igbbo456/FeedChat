@@ -16,6 +16,87 @@ import hashlib
 import secrets
 
 # ===================================
+# REAL-TIME MESSAGING SETUP
+# ===================================
+
+# Global message queue for real-time updates
+message_queue = queue.Queue()
+active_chats = set()
+
+def get_recent_messages(user_id, other_user_id, since_timestamp=None):
+    """Get messages since a specific timestamp for real-time updates"""
+    try:
+        c = conn.cursor()
+        if since_timestamp:
+            c.execute("""
+                SELECT m.*, u1.username as sender_name, u2.username as receiver_name
+                FROM messages m
+                JOIN users u1 ON m.sender_id = u1.id
+                JOIN users u2 ON m.receiver_id = u2.id
+                WHERE ((m.sender_id = ? AND m.receiver_id = ?) 
+                    OR (m.sender_id = ? AND m.receiver_id = ?))
+                AND m.created_at > ?
+                ORDER BY m.created_at ASC
+            """, (user_id, other_user_id, other_user_id, user_id, since_timestamp))
+        else:
+            c.execute("""
+                SELECT m.*, u1.username as sender_name, u2.username as receiver_name
+                FROM messages m
+                JOIN users u1 ON m.sender_id = u1.id
+                JOIN users u2 ON m.receiver_id = u2.id
+                WHERE (m.sender_id = ? AND m.receiver_id = ?) 
+                   OR (m.sender_id = ? AND m.receiver_id = ?)
+                ORDER BY m.created_at ASC
+                LIMIT 100
+            """, (user_id, other_user_id, other_user_id, user_id))
+        return c.fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+def mark_messages_as_read(user_id, other_user_id):
+    """Mark messages as read when user views them"""
+    try:
+        c = conn.cursor()
+        c.execute("""
+            UPDATE messages 
+            SET is_read = 1 
+            WHERE receiver_id = ? AND sender_id = ? AND is_read = 0
+        """, (user_id, other_user_id))
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        return False
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+def get_unread_count(user_id):
+    """Get total unread message count for user"""
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT COUNT(*) 
+            FROM messages 
+            WHERE receiver_id = ? AND is_read = 0
+        """, (user_id,))
+        result = c.fetchone()
+        return result[0] if result else 0
+    except sqlite3.Error:
+        return 0
+    finally:
+        try:
+            c.close()
+        except Exception:
+            pass
+
+# ===================================
 # CUSTOM DARK THEME CSS
 # ===================================
 
@@ -213,6 +294,49 @@ def inject_custom_css():
         border-radius: 20px;
         font-weight: 600;
         font-size: 0.8em;
+    }
+    
+    /* Message bubble styling */
+    .message-bubble {
+        padding: 12px 16px;
+        margin: 8px 0;
+        border-radius: 18px;
+        max-width: 70%;
+        word-wrap: break-word;
+    }
+    
+    .message-sent {
+        background: linear-gradient(135deg, #238636, #2ea043);
+        color: white;
+        margin-left: auto;
+        border-bottom-right-radius: 4px;
+    }
+    
+    .message-received {
+        background: #21262d;
+        color: #c9d1d9;
+        margin-right: auto;
+        border-bottom-left-radius: 4px;
+    }
+    
+    /* Message container */
+    .messages-container {
+        height: 400px;
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        background-color: #0d1117;
+    }
+    
+    /* Online status */
+    .online-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background-color: #3fb950;
+        border-radius: 50%;
+        margin-right: 8px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -1256,7 +1380,18 @@ def send_message(sender_id, receiver_id, content):
         c.execute("INSERT INTO messages (sender_id, receiver_id, content) VALUES (?, ?, ?)",
                  (sender_id, receiver_id, content))
         conn.commit()
-        return c.lastrowid
+        
+        # Add to message queue for real-time updates
+        message_id = c.lastrowid
+        message_queue.put({
+            'message_id': message_id,
+            'sender_id': sender_id,
+            'receiver_id': receiver_id,
+            'content': content,
+            'timestamp': datetime.datetime.now().isoformat()
+        })
+        
+        return message_id
     except sqlite3.Error:
         return None
     finally:
@@ -1304,7 +1439,9 @@ def get_conversations(user_id):
                 (SELECT content FROM messages 
                  WHERE ((sender_id = ? AND receiver_id = other_user_id) 
                      OR (sender_id = other_user_id AND receiver_id = ?))
-                 ORDER BY created_at DESC LIMIT 1) as last_message
+                 ORDER BY created_at DESC LIMIT 1) as last_message,
+                (SELECT COUNT(*) FROM messages 
+                 WHERE receiver_id = ? AND sender_id = other_user_id AND is_read = 0) as unread_count
             FROM messages m
             JOIN users u ON u.id = CASE 
                 WHEN m.sender_id = ? THEN m.receiver_id 
@@ -1313,7 +1450,7 @@ def get_conversations(user_id):
             WHERE m.sender_id = ? OR m.receiver_id = ?
             GROUP BY other_user_id
             ORDER BY last_message_time DESC
-        """, (user_id, user_id, user_id, user_id, user_id, user_id))
+        """, (user_id, user_id, user_id, user_id, user_id, user_id, user_id))
         return c.fetchall()
     except sqlite3.Error:
         return []
@@ -2012,6 +2149,194 @@ def update_leaderboard(user_id, metric_type, score, time_frame="weekly"):
             pass
 
 # ===================================
+# REAL-TIME MESSAGING COMPONENTS
+# ===================================
+
+def create_test_users():
+    """Create test users for messaging demo"""
+    test_users = [
+        ("alice", "password123", "alice@example.com", "Hi, I'm Alice! Love to chat and make new friends."),
+        ("bob", "password123", "bob@example.com", "Hello, I'm Bob! Tech enthusiast and coffee lover."),
+        ("charlie", "password123", "charlie@example.com", "Hey, I'm Charlie! Always up for a good conversation."),
+        ("diana", "password123", "diana@example.com", "Hi there! I'm Diana, passionate about art and travel.")
+    ]
+    
+    created_count = 0
+    for username, password, email, bio in test_users:
+        if not verify_user(username, password):
+            if create_user(username, password, email, None, bio):
+                created_count += 1
+    
+    if created_count > 0:
+        st.sidebar.success(f"✅ Created {created_count} test users!")
+    return created_count
+
+def messaging_page():
+    """Real-time messaging page"""
+    st.markdown("<h1 class='gradient-text'>💬 Real-Time Chat</h1>", unsafe_allow_html=True)
+    
+    # Create test users if needed
+    if st.sidebar.button("🧪 Create Test Users"):
+        create_test_users()
+        st.rerun()
+    
+    # Show unread count in sidebar
+    unread_count = get_unread_count(st.session_state.user_id)
+    if unread_count > 0:
+        st.sidebar.markdown(f"<div class='premium-badge'>📨 {unread_count} unread messages</div>", unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["💬 Active Chats", "👥 Find Users"])
+    
+    with tab1:
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            st.markdown("### 💭 Conversations")
+            
+            # Auto-refresh toggle
+            auto_refresh = st.checkbox("🔄 Auto-refresh messages", value=True)
+            if auto_refresh:
+                st.caption("Messages update every 3 seconds")
+                time.sleep(3)  # Simulate real-time updates
+                st.rerun()
+            
+            conversations = get_conversations(st.session_state.user_id)
+            
+            if not conversations:
+                st.info("💬 No conversations yet. Start a new chat!")
+            else:
+                for conv in conversations:
+                    other_user_id, username, profile_pic, last_message_time, last_message, unread_count = conv
+                    
+                    # Format conversation button with unread count
+                    button_text = f"👤 {username}"
+                    if unread_count > 0:
+                        button_text = f"🔔 {username} ({unread_count})"
+                    
+                    if st.button(button_text, key=f"conv_{other_user_id}", use_container_width=True):
+                        st.session_state.current_chat = other_user_id
+                        st.session_state.chat_username = username
+                        # Mark messages as read when opening chat
+                        mark_messages_as_read(st.session_state.user_id, other_user_id)
+                        st.rerun()
+        
+        with col2:
+            if hasattr(st.session_state, 'current_chat'):
+                st.markdown(f"### 💬 Chat with {st.session_state.chat_username}")
+                
+                # Mark messages as read when viewing
+                mark_messages_as_read(st.session_state.user_id, st.session_state.current_chat)
+                
+                # Message container with scroll
+                messages_container = st.container()
+                
+                with messages_container:
+                    # Get and display messages
+                    messages = get_messages(st.session_state.user_id, st.session_state.current_chat, limit=100)
+                    
+                    if not messages:
+                        st.info("💭 No messages yet. Start the conversation!")
+                    else:
+                        for msg in messages:
+                            msg_id, sender_id, receiver_id, content, is_read, created_at, sender_name, receiver_name = msg
+                            
+                            # Format timestamp
+                            message_time = created_at.split(' ')[1][:5] if ' ' in created_at else created_at
+                            
+                            if sender_id == st.session_state.user_id:
+                                # Sent message (right aligned)
+                                st.markdown(f"""
+                                <div style="display: flex; justify-content: flex-end; margin: 10px 0;">
+                                    <div class="message-bubble message-sent">
+                                        <div style="font-size: 0.9em;">{content}</div>
+                                        <div style="font-size: 0.7em; text-align: right; opacity: 0.8; margin-top: 5px;">
+                                            {message_time} {'' if is_read else '✉️'}
+                                        </div>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            else:
+                                # Received message (left aligned)
+                                st.markdown(f"""
+                                <div style="display: flex; justify-content: flex-start; margin: 10px 0;">
+                                    <div class="message-bubble message-received">
+                                        <div style="font-weight: bold; font-size: 0.8em; color: #58a6ff; margin-bottom: 4px;">
+                                            {sender_name}
+                                        </div>
+                                        <div style="font-size: 0.9em;">{content}</div>
+                                        <div style="font-size: 0.7em; text-align: right; opacity: 0.8; margin-top: 5px;">
+                                            {message_time}
+                                        </div>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                
+                # Send message form
+                st.markdown("---")
+                with st.form("send_message", clear_on_submit=True):
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        message_content = st.text_input(
+                            "💭 Type your message...", 
+                            key="message_input",
+                            placeholder="Type a message and press Enter..."
+                        )
+                    with col2:
+                        send_button = st.form_submit_button("📤 Send", use_container_width=True)
+                    
+                    if send_button and message_content:
+                        if send_message(st.session_state.user_id, st.session_state.current_chat, message_content):
+                            st.success("✅ Message sent!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to send message")
+                
+                # Quick responses
+                st.markdown("#### 💡 Quick Responses")
+                quick_responses = ["Hello!", "How are you?", "Thanks!", "Let's chat later!"]
+                cols = st.columns(4)
+                for idx, response in enumerate(quick_responses):
+                    with cols[idx]:
+                        if st.button(response, key=f"quick_{idx}", use_container_width=True):
+                            if send_message(st.session_state.user_id, st.session_state.current_chat, response):
+                                st.success("✅ Message sent!")
+                                st.rerun()
+            else:
+                st.info("💬 Select a conversation to start chatting")
+    
+    with tab2:
+        st.markdown("### 👥 All Users")
+        
+        # Search functionality
+        search_term = st.text_input("🔍 Search users...", placeholder="Type username to search")
+        
+        users = get_all_users()
+        # Filter out current user and apply search filter
+        other_users = [
+            user for user in users 
+            if user[0] != st.session_state.user_id and 
+            (not search_term or search_term.lower() in user[1].lower())
+        ]
+        
+        if not other_users:
+            st.info("👥 No other users found. Create another account to test messaging!")
+        else:
+            for user in other_users:
+                user_id, username = user
+                col1, col2, col3 = st.columns([3, 2, 1])
+                
+                with col1:
+                    st.write(f"**👤 {username}**")
+                
+                with col3:
+                    if st.button("💬 Message", key=f"msg_{user_id}"):
+                        st.session_state.current_chat = user_id
+                        st.session_state.chat_username = username
+                        st.rerun()
+                
+                st.markdown("---")
+
+# ===================================
 # STREAMLIT UI COMPONENTS - UPDATED FOR DARK THEME
 # ===================================
 
@@ -2370,64 +2695,6 @@ def groups_page():
                         st.error("❌ Failed to create group. Name might be taken.")
                 else:
                     st.error("⚠️ Please fill in group name and description")
-
-def messaging_page():
-    """Messaging page"""
-    st.markdown("<h1 class='gradient-text'>💬 Messages</h1>", unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.markdown("### 💭 Conversations")
-        conversations = get_conversations(st.session_state.user_id)
-        
-        if not conversations:
-            st.info("💬 No conversations yet.")
-        else:
-            for conv in conversations:
-                other_user_id, username, profile_pic, last_message_time, last_message = conv
-                
-                if st.button(f"👤 {username}: {last_message[:30] if last_message else 'No messages'}...", key=f"conv_{other_user_id}"):
-                    st.session_state.current_chat = other_user_id
-                    st.session_state.chat_username = username
-                    st.rerun()
-    
-    with col2:
-        if hasattr(st.session_state, 'current_chat'):
-            st.markdown(f"### 💬 Chat with {st.session_state.chat_username}")
-            
-            # Display messages
-            messages = get_messages(st.session_state.user_id, st.session_state.current_chat)
-            
-            for msg in messages:
-                msg_id, sender_id, receiver_id, content, is_read, created_at, sender_name, receiver_name = msg
-                
-                if sender_id == st.session_state.user_id:
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, #238636, #2ea043); color: white; padding: 12px; border-radius: 18px 18px 4px 18px; margin: 8px 0; margin-left: 20%;">
-                        <strong>You</strong><br>
-                        {content}
-                        <div style="font-size: 0.8em; text-align: right;">{created_at}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.markdown(f"""
-                    <div style="background: #21262d; color: #c9d1d9; padding: 12px; border-radius: 18px 18px 18px 4px; margin: 8px 0; margin-right: 20%;">
-                        <strong>{sender_name}</strong><br>
-                        {content}
-                        <div style="font-size: 0.8em; text-align: right;">{created_at}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            # Send message
-            with st.form("send_message"):
-                message_content = st.text_input("💭 Type a message...")
-                if st.form_submit_button("📤 Send"):
-                    if message_content:
-                        send_message(st.session_state.user_id, st.session_state.current_chat, message_content)
-                        st.rerun()
-        else:
-            st.info("💬 Select a conversation to start chatting")
 
 def profile_page():
     """User profile page"""
@@ -2796,7 +3063,7 @@ def main():
         "📸 Stories", 
         "🎥 Live Streams",
         "👥 Groups",
-        "💬 Messages",
+        "💬 Real-Time Chat",
         "🛒 Marketplace",
         "🤖 Recommendations",
         "⭐ Premium",
@@ -2813,6 +3080,11 @@ def main():
         st.sidebar.metric("Posts", "25")
     with col2:
         st.sidebar.metric("Followers", "142")
+    
+    # Show unread messages count
+    unread_count = get_unread_count(st.session_state.user_id)
+    if unread_count > 0:
+        st.sidebar.markdown(f"<div class='premium-badge' style='text-align: center; margin: 10px 0;'>📨 {unread_count} unread messages</div>", unsafe_allow_html=True)
     
     # Premium badge in sidebar
     subscription = get_user_subscription(st.session_state.user_id)
@@ -2838,7 +3110,7 @@ def main():
         live_streams_page()
     elif selected_menu == "👥 Groups":
         groups_page()
-    elif selected_menu == "💬 Messages":
+    elif selected_menu == "💬 Real-Time Chat":
         messaging_page()
     elif selected_menu == "🛒 Marketplace":
         marketplace_page()
