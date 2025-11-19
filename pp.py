@@ -14,8 +14,6 @@ from typing import List, Dict, Any
 import uuid
 import hashlib
 import secrets
-import requests
-from streamlit_autorefresh import st_autorefresh
 
 # ===================================
 # CLOUD DEPLOYMENT ENHANCEMENTS
@@ -558,8 +556,200 @@ def get_global_posts(limit=20, offset=0, language=None, location=None):
         return []
 
 # ===================================
+# CORE FUNCTIONS FROM ORIGINAL CODE
+# ===================================
+
+def is_valid_image(image_data):
+    """Check if the image data is valid and can be opened by PIL"""
+    try:
+        if image_data is None:
+            return False
+        if isinstance(image_data, str):
+            # Handle base64 encoded images
+            image_data = base64.b64decode(image_data)
+        image = Image.open(io.BytesIO(image_data))
+        image.verify()
+        return True
+    except (IOError, SyntaxError, Exception):
+        return False
+
+def display_image_safely(image_data, caption="", width=None, use_container_width=False):
+    """Safely display an image with error handling"""
+    try:
+        if image_data:
+            if isinstance(image_data, str):
+                # Handle base64 encoded images
+                image_data = base64.b64decode(image_data)
+            
+            if is_valid_image(image_data):
+                if width:
+                    st.image(io.BytesIO(image_data), caption=caption, width=width)
+                elif use_container_width:
+                    st.image(io.BytesIO(image_data), caption=caption, use_container_width=True)
+                else:
+                    st.image(io.BytesIO(image_data), caption=caption)
+            else:
+                st.warning("Unable to display image (corrupted or invalid format)")
+    except Exception as e:
+        st.warning(f"Error displaying image: {str(e)}")
+
+def like_post(user_id, post_id):
+    """Like a post"""
+    try:
+        c = conn.cursor()
+        c.execute("INSERT OR IGNORE INTO likes (user_id, post_id) VALUES (?, ?)", (user_id, post_id))
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        return False
+
+def add_comment(post_id, user_id, content):
+    """Add a comment to a post"""
+    try:
+        c = conn.cursor()
+        c.execute("INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)",
+                 (post_id, user_id, content))
+        conn.commit()
+        return c.lastrowid
+    except sqlite3.Error:
+        return None
+
+def get_comments(post_id):
+    """Get comments for a post"""
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT c.*, u.username, u.profile_pic
+            FROM comments c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.post_id = ?
+            ORDER BY c.created_at ASC
+        """, (post_id,))
+        return c.fetchall()
+    except sqlite3.Error:
+        return []
+
+def share_post(user_id, post_id):
+    """Share a post"""
+    try:
+        c = conn.cursor()
+        c.execute("INSERT INTO shares (user_id, post_id) VALUES (?, ?)", (user_id, post_id))
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        return False
+
+# ===================================
 # ENHANCED UI COMPONENTS
 # ===================================
+
+def inject_custom_css():
+    """Inject custom CSS for dark theme"""
+    st.markdown("""
+    <style>
+    /* Main dark theme */
+    .main {
+        background-color: #0d1117;
+        color: #c9d1d9;
+    }
+    
+    /* Sidebar styling */
+    .css-1d391kg, .css-1lcbmhc {
+        background-color: #161b22 !important;
+    }
+    
+    /* Headers */
+    h1, h2, h3, h4, h5, h6 {
+        color: #58a6ff !important;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+    
+    /* Custom feed card styling */
+    .feed-card {
+        background-color: #161b22;
+        border-radius: 12px;
+        padding: 20px;
+        margin: 10px 0;
+        border: 1px solid #30363d;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .feed-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+        border-color: #58a6ff;
+    }
+    
+    /* Custom buttons */
+    .stButton>button {
+        background-color: #238636 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 10px 20px !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stButton>button:hover {
+        background-color: #2ea043 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(46, 160, 67, 0.3) !important;
+    }
+    
+    /* Message bubble styling */
+    .message-bubble {
+        padding: 12px 16px;
+        margin: 8px 0;
+        border-radius: 18px;
+        max-width: 70%;
+        word-wrap: break-word;
+    }
+    
+    .message-sent {
+        background: linear-gradient(135deg, #238636, #2ea043);
+        color: white;
+        margin-left: auto;
+        border-bottom-right-radius: 4px;
+    }
+    
+    .message-received {
+        background: #21262d;
+        color: #c9d1d9;
+        margin-right: auto;
+        border-bottom-left-radius: 4px;
+    }
+    
+    /* Gradient text */
+    .gradient-text {
+        background: linear-gradient(135deg, #58a6ff, #238636);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 800;
+    }
+    
+    /* Custom badges */
+    .premium-badge {
+        background: linear-gradient(135deg, #ffd700, #ff6b00);
+        color: #000 !important;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.8em;
+    }
+    
+    .pro-badge {
+        background: linear-gradient(135deg, #58a6ff, #1f6feb);
+        color: white !important;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.8em;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 def global_user_profile():
     """Enhanced user profile with global features"""
@@ -605,8 +795,11 @@ def global_messaging_interface():
     """Enhanced messaging interface for global communication"""
     st.markdown("<h1 class='gradient-text'>💬 Global Messaging</h1>", unsafe_allow_html=True)
     
-    # Auto-refresh for real-time messages
-    count = st_autorefresh(interval=5000, key="message_refresh")
+    # Manual refresh button instead of auto-refresh
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
     
     # Show online users
     st.sidebar.markdown("### 👥 Online Users")
@@ -966,8 +1159,11 @@ def global_feed_page():
     """Global feed page showing posts from around the world"""
     st.markdown("<h1 class='gradient-text'>🌍 Global Feed</h1>", unsafe_allow_html=True)
     
-    # Auto-refresh for new global posts
-    count = st_autorefresh(interval=10000, key="feed_refresh")
+    # Manual refresh instead of auto-refresh
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔄 Refresh Feed", use_container_width=True):
+            st.rerun()
     
     # Filters
     col1, col2, col3 = st.columns(3)
@@ -1251,16 +1447,23 @@ def show_deployment_instructions():
         st.markdown("""
         ### To deploy globally:
         
-        1. **Push to GitHub**
-        2. **Deploy on Streamlit Cloud:**
+        1. **Create `requirements.txt`:**
+        ```txt
+        streamlit
+        Pillow
+        ```
+        
+        2. **Push to GitHub**
+        
+        3. **Deploy on Streamlit Cloud:**
            - Go to [share.streamlit.io](https://share.streamlit.io)
            - Connect your GitHub repo
            - Deploy!
         
-        3. **Your app will be available at:**
+        4. **Your app will be available at:**
            `https://your-app-name.streamlit.app`
         
-        4. **Share this URL worldwide!** 🌍
+        5. **Share this URL worldwide!** 🌍
         """)
 
 # Show deployment instructions
