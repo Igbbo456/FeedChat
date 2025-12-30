@@ -17,7 +17,7 @@ import secrets
 # ===================================
 
 THEME_CONFIG = {
-    "app_name": "ClipSphere",
+    "app_name": "Feed Chat",
     "version": "4.0",
     "theme": {
         "primary": "#FF0050",  # TikTok pink
@@ -84,7 +84,7 @@ def format_tiktok_time(timestamp):
 
 def init_simple_db():
     """Initialize database with essential tables"""
-    conn = sqlite3.connect("clipsphere.db", check_same_thread=False)
+    conn = sqlite3.connect("feedchat.db", check_same_thread=False)
     c = conn.cursor()
 
     # Users table
@@ -757,12 +757,12 @@ def inject_tiktok_css():
     """, unsafe_allow_html=True)
 
 # ===================================
-# TIKTOK-STYLE PAGES
+# FEED CHAT PAGES
 # ===================================
 
-def tiktok_feed_page():
-    """TikTok-style vertical feed"""
-    st.markdown("<h1 style='text-align: center;'>🎬 For You</h1>", unsafe_allow_html=True)
+def feed_page():
+    """Feed Chat vertical feed"""
+    st.markdown("<h1 style='text-align: center;'>🎬 Your Feed</h1>", unsafe_allow_html=True)
     
     # Trending hashtags
     trending_hashtags = get_trending_hashtags(5)
@@ -785,14 +785,14 @@ def tiktok_feed_page():
     
     # Display posts in TikTok style
     for post in posts:
-        display_tiktok_post(post)
+        display_feed_post(post)
     
     # Load more button
     if st.button("Load More", use_container_width=True):
         st.rerun()
 
-def display_tiktok_post(post):
-    """Display post in TikTok vertical format"""
+def display_feed_post(post):
+    """Display post in Feed Chat vertical format"""
     if len(post) < 18:  # Check post structure
         return
         
@@ -1048,8 +1048,8 @@ def create_content_page():
                 else:
                     st.error("Please write something to post")
 
-def profile_page_tiktok():
-    """TikTok-style profile page"""
+def profile_page():
+    """Feed Chat profile page"""
     user = get_user(st.session_state.user_id)
     
     if user:
@@ -1166,11 +1166,11 @@ def profile_page_tiktok():
 # ===================================
 
 def main():
-    """Main application with TikTok features"""
+    """Main Feed Chat application"""
     
     # Page configuration
     st.set_page_config(
-        page_title="ClipSphere",
+        page_title="Feed Chat",
         page_icon="🎬",
         layout="wide",
         initial_sidebar_state="collapsed"
@@ -1193,12 +1193,12 @@ def main():
     
     # Show login page if not logged in
     if not st.session_state.logged_in:
-        # TikTok-style login
+        # Feed Chat login
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col2:
-            st.markdown("<h1 style='text-align: center;'>🎬 ClipSphere</h1>", unsafe_allow_html=True)
-            st.markdown("<h3 style='text-align: center;'>Create, Share, Discover</h3>", unsafe_allow_html=True)
+            st.markdown("<h1 style='text-align: center;'>🎬 Feed Chat</h1>", unsafe_allow_html=True)
+            st.markdown("<h3 style='text-align: center;'>Connect, Share, Discover</h3>", unsafe_allow_html=True)
             
             tab1, tab2 = st.tabs(["Login", "Sign Up"])
             
@@ -1260,7 +1260,7 @@ def main():
     <div class="mobile-nav">
         <a href="?page=feed" class="mobile-nav-item %s">
             <span style="font-size: 24px;">🏠</span>
-            <span>For You</span>
+            <span>Feed</span>
         </a>
         <a href="?page=discover" class="mobile-nav-item %s">
             <span style="font-size: 24px;">🔍</span>
@@ -1284,26 +1284,26 @@ def main():
     
     # Main content based on page
     if page == "feed":
-        tiktok_feed_page()
+        feed_page()
     elif page == "discover":
         discover_page()
     elif page == "create":
         create_content_page()
     elif page == "profile":
-        profile_page_tiktok()
+        profile_page()
     else:
-        tiktok_feed_page()
+        feed_page()
     
     # Desktop sidebar
     with st.sidebar:
-        st.markdown("<h2 style='text-align: center;'>🎬 ClipSphere</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center;'>🎬 Feed Chat</h2>", unsafe_allow_html=True)
         st.markdown(f"### 👋 @{st.session_state.username}")
         
         st.markdown("---")
         
         # Desktop navigation
         nav_options = {
-            "feed": "🏠 For You",
+            "feed": "🏠 Feed",
             "discover": "🔍 Discover", 
             "create": "➕ Create",
             "profile": "👤 Profile"
