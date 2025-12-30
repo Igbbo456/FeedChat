@@ -40,13 +40,12 @@ THEME_CONFIG = {
 }
 
 # ===================================
-# FIXED DATABASE SETUP
+# DATABASE SETUP
 # ===================================
 
 def init_simple_db():
-    """Initialize database with essential tables - FIXED VERSION"""
+    """Initialize database with essential tables"""
     try:
-        # Ensure the database file exists
         conn = sqlite3.connect("feedchat.db", check_same_thread=False, isolation_level=None)
         c = conn.cursor()
         
@@ -86,6 +85,7 @@ def init_simple_db():
             content TEXT NOT NULL,
             media_type TEXT,
             media_data BLOB,
+            thumbnail BLOB,
             location TEXT DEFAULT 'Unknown',
             language TEXT DEFAULT 'en',
             visibility TEXT DEFAULT 'public',
@@ -173,80 +173,43 @@ def init_simple_db():
         c.execute("CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_likes_post ON likes(post_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)")
-
+        
         conn.commit()
-        
-        # Create demo data if tables are empty
-        create_demo_data(conn)
-        
         return conn
     except Exception as e:
         st.error(f"Database initialization error: {str(e)}")
         return sqlite3.connect("feedchat.db", check_same_thread=False)
 
-def create_demo_data(conn):
-    """Create demo users and posts if they don't exist"""
+def create_thumbnail_for_video(video_bytes):
+    """Create a thumbnail for video (placeholder)"""
     try:
-        c = conn.cursor()
+        # For now, create a simple image thumbnail
+        img = Image.new('RGB', (320, 180), color=(40, 40, 40))
+        draw = ImageDraw.Draw(img)
         
-        # Check if demo user exists
-        c.execute("SELECT COUNT(*) FROM users WHERE username = 'demo'")
-        if c.fetchone()[0] == 0:
-            # Create demo user
-            c.execute("""
-            INSERT INTO users (username, display_name, password_hash, email, bio, location, is_online)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, ("demo", "Demo User", "demo_hash", "demo@feedchat.com", 
-                  "Welcome to Feed Chat! 🎬", "Internet", 1))
-            
-            # Create other demo users
-            demo_users = [
-                ("tiktokfan", "TikTok Fan", "Passionate about short videos", "Los Angeles"),
-                ("trendsetter", "Trend Setter", "Setting trends since 2020", "New York"),
-                ("creator", "Content Creator", "Making awesome content daily", "London"),
-                ("traveler", "World Traveler", "Exploring the world 🌍", "Paris"),
-                ("gamer", "Pro Gamer", "Live streaming games 🎮", "Tokyo")
-            ]
-            
-            for username, display_name, bio, location in demo_users:
-                c.execute("""
-                INSERT INTO users (username, display_name, password_hash, email, bio, location)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, (username, display_name, "demo_hash", f"{username}@feedchat.com", bio, location))
-            
-            conn.commit()
-            
-            # Create demo posts
-            c.execute("SELECT id FROM users")
-            user_ids = [row[0] for row in c.fetchall()]
-            
-            demo_posts = [
-                ("Just joined Feed Chat! So excited to connect with everyone 🎉 #NewUser #Welcome", None, None),
-                ("Check out this amazing sunset view! 🌅 #Nature #Photography", None, None),
-                ("Working on some new content ideas today 💡 #Creator #Content", None, None),
-                ("Just hit a new personal record! 🏆 #Achievement #Gaming", None, None),
-                ("Traveling to a new destination next week! ✈️ #Travel #Adventure", None, None),
-                ("Learning new video editing techniques 📹 #Learning #Skills", None, None),
-                ("The food at this place is incredible! 🍕 #Foodie #Restaurant", None, None),
-                ("Morning workout complete! 💪 #Fitness #Health", None, None),
-                ("Can't wait for the weekend! 🎉 #WeekendVibes #Fun", None, None),
-                ("Working from home setup is finally complete! 🖥️ #WFH #Setup", None, None)
-            ]
-            
-            for content, media_type, media_data in demo_posts:
-                user_id = random.choice(user_ids)
-                hashtags = extract_hashtags_string(content)
-                c.execute("""
-                INSERT INTO posts (user_id, content, media_type, media_data, hashtags)
-                VALUES (?, ?, ?, ?, ?)
-                """, (user_id, content, media_type, media_data, hashtags))
-            
-            conn.commit()
-            
-    except Exception as e:
-        print(f"Demo data creation error: {e}")
+        # Draw a play button
+        draw.polygon([(140, 80), (140, 100), (160, 90)], fill=(255, 0, 80))
+        
+        # Convert to bytes
+        img_byte_arr = io.BytesIO()
+        img.save(img_byte_arr, format='JPEG')
+        return img_byte_arr.getvalue()
+    except:
+        return None
+
+def create_thumbnail_for_image(image_bytes):
+    """Create thumbnail for image"""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.thumbnail((320, 320))  # Create thumbnail
+        img_byte_arr = io.BytesIO()
+        img.save(img_byte_arr, format='JPEG')
+        return img_byte_arr.getvalue()
+    except:
+        return None
+
+# Initialize database
+conn = init_simple_db()
 
 # ===================================
 # CORE FUNCTIONS
@@ -311,12 +274,26 @@ def inject_tiktok_css():
     }}
     .stButton>button:hover {{
         background: linear-gradient(45deg, {THEME_CONFIG['theme']['primary']}, {THEME_CONFIG['theme']['secondary']});
+        color: white;
+    }}
+    .post-card {{
+        background: {THEME_CONFIG['theme']['surface']};
+        border-radius: 15px;
+        padding: 15px;
+        margin: 10px 0;
+        border: 1px solid {THEME_CONFIG['theme']['border']};
+    }}
+    .hashtag {{
+        display: inline-block;
+        background: rgba(255, 0, 80, 0.1);
+        color: {THEME_CONFIG['theme']['primary']};
+        padding: 4px 12px;
+        border-radius: 15px;
+        margin: 2px;
+        font-size: 12px;
     }}
     </style>
     """, unsafe_allow_html=True)
-
-# Initialize database
-conn = init_simple_db()
 
 # ===================================
 # USER MANAGEMENT FUNCTIONS
@@ -347,6 +324,10 @@ def get_user(user_id):
     except:
         return None
 
+def hash_password(password):
+    """Hash password for storage"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
 def verify_user_secure(username, password):
     """Enhanced user verification"""
     try:
@@ -359,17 +340,18 @@ def verify_user_secure(username, password):
         user = c.fetchone()
         
         if user:
-            # Accept any password for demo
-            c.execute("UPDATE users SET is_online=1, last_seen=CURRENT_TIMESTAMP WHERE id=?", (user[0],))
-            conn.commit()
-            return user[0], user[1]
+            # Check password
+            if hash_password(password) == user[2]:
+                c.execute("UPDATE users SET is_online=1, last_seen=CURRENT_TIMESTAMP WHERE id=?", (user[0],))
+                conn.commit()
+                return user[0], user[1]
         
         return None, None
     except:
         return None, None
 
-def create_user_secure(username, password, email):
-    """Create user"""
+def create_user_secure(username, password, email, display_name=None):
+    """Create user with secure password hashing"""
     try:
         c = conn.cursor()
         
@@ -378,16 +360,24 @@ def create_user_secure(username, password, email):
         if c.fetchone():
             return False, "Username already exists"
         
+        # Check if email exists
+        c.execute("SELECT id FROM users WHERE email=?", (email,))
+        if c.fetchone():
+            return False, "Email already registered"
+        
         # Create user
+        password_hash = hash_password(password)
+        display_name = display_name or username
+        
         c.execute("""
             INSERT INTO users (username, display_name, password_hash, email) 
             VALUES (?, ?, ?, ?)
-        """, (username, username, "demo_hash", email))
+        """, (username, display_name, password_hash, email))
         
         conn.commit()
         return True, "Account created successfully"
-    except:
-        return False, "Error creating account"
+    except Exception as e:
+        return False, f"Error creating account: {str(e)}"
 
 def get_global_users(search_term=None, limit=50):
     """Get global users with filtering"""
@@ -492,7 +482,7 @@ def get_messages(user_id, other_user_id, limit=50):
 # ===================================
 
 def create_post(user_id, content, media_data=None, media_type=None, location=None, language="en", visibility="public"):
-    """Create post with enhanced features"""
+    """Create post with media support"""
     try:
         if not content or len(content.strip()) == 0:
             return False, "Post content cannot be empty"
@@ -502,11 +492,19 @@ def create_post(user_id, content, media_data=None, media_type=None, location=Non
         # Extract hashtags
         hashtags_str = extract_hashtags_string(content)
         
+        # Create thumbnail if media is provided
+        thumbnail = None
+        if media_data and media_type:
+            if 'image' in media_type:
+                thumbnail = create_thumbnail_for_image(media_data)
+            elif 'video' in media_type:
+                thumbnail = create_thumbnail_for_video(media_data)
+        
         c.execute("""
             INSERT INTO posts 
-            (user_id, content, media_type, media_data, location, language, visibility, hashtags) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, content, media_type, media_data, location, language, visibility, hashtags_str))
+            (user_id, content, media_type, media_data, thumbnail, location, language, visibility, hashtags) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, content, media_type, media_data, thumbnail, location, language, visibility, hashtags_str))
         
         post_id = c.lastrowid
         
@@ -686,6 +684,25 @@ def is_following(follower_id, following_id):
         return False
 
 # ===================================
+# MEDIA DISPLAY FUNCTIONS
+# ===================================
+
+def display_media(media_data, media_type, caption=""):
+    """Display media (image or video)"""
+    try:
+        if media_data:
+            if media_type and 'video' in media_type:
+                # Display video
+                st.video(media_data)
+            elif media_type and 'image' in media_type:
+                # Display image
+                st.image(media_data, caption=caption, use_container_width=True)
+        return True
+    except Exception as e:
+        st.error(f"Error displaying media: {str(e)}")
+        return False
+
+# ===================================
 # PAGE FUNCTIONS
 # ===================================
 
@@ -698,18 +715,6 @@ def feed_page():
     
     if not posts:
         st.info("No posts yet. Create your first post!")
-        
-        # Quick post creation
-        with st.form("quick_post_form"):
-            content = st.text_area("What's on your mind?", placeholder="Share something...")
-            if st.form_submit_button("Post", use_container_width=True):
-                if content:
-                    success, result = create_post(st.session_state.user_id, content)
-                    if success:
-                        st.success("Post created!")
-                        st.rerun()
-                    else:
-                        st.error(result)
         return
     
     # Display posts
@@ -725,28 +730,49 @@ def display_feed_post(post):
     if len(post) < 15:
         return
         
+    post_id, user_id, content, media_type, media_data, thumbnail, location, language, visibility, is_deleted, like_count, comment_count, share_count, view_count, hashtags, created_at, username, profile_pic, display_name, post_like_count, post_comment_count = post
+    
     with st.container():
         st.markdown("---")
-        
-        # Post content
-        if post[2]:  # content
-            st.markdown(f"**{post[2]}**")
         
         # User info
         col1, col2 = st.columns([1, 10])
         with col1:
-            username = post[15] if len(post) > 15 else "Unknown"
-            st.markdown(f"**@{username}**")
+            if profile_pic:
+                try:
+                    st.image(profile_pic, width=40)
+                except:
+                    st.markdown(f"**@{username}**")
+            else:
+                st.markdown(f"**@{username}**")
+        with col2:
+            st.markdown(f"**{display_name or username}**")
+            if location:
+                st.caption(f"📍 {location}")
+            st.caption(f"🕒 {format_tiktok_time(created_at)}")
+        
+        # Post content
+        if content:
+            st.markdown(f"**{content}**")
+        
+        # Display media if exists
+        if media_data and media_type:
+            display_media(media_data, media_type)
+        
+        # Hashtags
+        if hashtags:
+            tags = hashtags.split(',')
+            for tag in tags[:5]:
+                if tag.strip():
+                    st.markdown(f"<span class='hashtag'>#{tag.strip()}</span>", unsafe_allow_html=True)
         
         # Engagement buttons
         col_a, col_b, col_c, col_d = st.columns(4)
-        post_id = post[0]
         
         with col_a:
             liked = has_liked_post(st.session_state.user_id, post_id)
-            like_count = post[18] if len(post) > 18 else 0
             like_text = "❤️" if not liked else "💔"
-            if st.button(f"{like_text}\n{like_count}", key=f"like_{post_id}"):
+            if st.button(f"{like_text}\n{post_like_count}", key=f"like_{post_id}", use_container_width=True):
                 if liked:
                     unlike_post(st.session_state.user_id, post_id)
                 else:
@@ -754,18 +780,17 @@ def display_feed_post(post):
                 st.rerun()
         
         with col_b:
-            comment_count = post[19] if len(post) > 19 else 0
-            if st.button(f"💬\n{comment_count}", key=f"comment_{post_id}"):
+            if st.button(f"💬\n{post_comment_count}", key=f"comment_{post_id}", use_container_width=True):
                 st.info("Comment feature coming soon!")
         
         with col_c:
-            if st.button(f"↪️\nShare", key=f"share_{post_id}"):
+            if st.button(f"↪️\nShare", key=f"share_{post_id}", use_container_width=True):
                 st.info("Share feature coming soon!")
         
         with col_d:
             saved = is_saved(st.session_state.user_id, post_id)
             save_text = "⬇️" if not saved else "✅"
-            if st.button(f"{save_text}", key=f"save_{post_id}"):
+            if st.button(f"{save_text}", key=f"save_{post_id}", use_container_width=True):
                 if saved:
                     unsave_post(st.session_state.user_id, post_id)
                 else:
@@ -793,7 +818,7 @@ def discover_page():
     
     # Suggested accounts
     st.markdown("### 👥 Suggested For You")
-    suggested_users = get_global_users(limit=6)
+    suggested_users = get_global_users(search_query, limit=6)
     
     if suggested_users:
         cols = st.columns(3)
@@ -815,24 +840,56 @@ def discover_page():
                         st.rerun()
 
 def create_content_page():
-    """Content creation page"""
-    st.markdown("<h1 style='text-align: center;'>➕ Create</h1>", unsafe_allow_html=True)
+    """Content creation page with media upload"""
+    st.markdown("<h1 style='text-align: center;'>➕ Create Post</h1>", unsafe_allow_html=True)
+    
+    # File uploader
+    uploaded_file = st.file_uploader(
+        "Choose a file to upload",
+        type=['jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov', 'avi', 'mkv'],
+        help="Upload an image or video (max 100MB)"
+    )
+    
+    # Display preview
+    if uploaded_file:
+        file_type = uploaded_file.type
+        
+        if 'image' in file_type:
+            st.image(uploaded_file, caption="Preview", use_container_width=True)
+        elif 'video' in file_type:
+            st.video(uploaded_file)
     
     with st.form("create_post_form"):
-        content = st.text_area("What's happening?", placeholder="Share your thoughts...", height=150)
+        content = st.text_area("What's happening?", placeholder="Share your thoughts... #hashtag", height=100)
         location = st.text_input("Location", placeholder="Add location (optional)")
         
-        if st.form_submit_button("Post", use_container_width=True):
-            if content:
-                success, result = create_post(st.session_state.user_id, content, location=location)
-                if success:
-                    st.success("Post created!")
-                    time.sleep(1)
-                    st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            visibility = st.selectbox("Visibility", ["public", "friends", "private"])
+        with col2:
+            if st.form_submit_button("Post", use_container_width=True):
+                if content:
+                    media_data = uploaded_file.read() if uploaded_file else None
+                    media_type = uploaded_file.type if uploaded_file else None
+                    
+                    with st.spinner("Posting..."):
+                        success, result = create_post(
+                            st.session_state.user_id, 
+                            content, 
+                            media_data, 
+                            media_type,
+                            location=location,
+                            visibility=visibility
+                        )
+                        
+                        if success:
+                            st.success("🎉 Post created successfully!")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Error: {result}")
                 else:
-                    st.error(result)
-            else:
-                st.error("Please write something to post")
+                    st.error("Please write something to post")
 
 def profile_page():
     """Feed Chat profile page"""
@@ -844,11 +901,30 @@ def profile_page():
          follower_count, following_count, total_likes, verified) = user
         
         # Profile header
-        st.markdown(f"# {display_name or username}")
-        st.markdown(f"@{username}")
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if profile_pic:
+                try:
+                    st.image(profile_pic, width=100)
+                except:
+                    st.markdown(f"""
+                    <div style='width: 100px; height: 100px; border-radius: 50%; 
+                                background: linear-gradient(45deg, #FF0050, #00F2EA);
+                                display: flex; align-items: center; justify-content: center; 
+                                color: white; font-size: 48px; font-weight: bold;'>
+                        {(display_name or username)[0].upper()}
+                    </div>
+                    """, unsafe_allow_html=True)
         
-        if bio:
-            st.markdown(f"{bio}")
+        with col2:
+            st.markdown(f"# {display_name or username}")
+            st.markdown(f"@{username}")
+            
+            if bio:
+                st.markdown(f"{bio}")
+            
+            if location:
+                st.markdown(f"📍 {location}")
         
         # Stats
         col1, col2, col3, col4 = st.columns(4)
@@ -866,11 +942,22 @@ def profile_page():
         user_posts = get_posts(user_id=st.session_state.user_id, limit=12)
         
         if user_posts:
-            for post in user_posts:
-                if len(post) > 2:
-                    with st.expander(f"Post: {post[2][:50]}..." if len(post[2]) > 50 else f"Post: {post[2]}"):
-                        st.markdown(post[2])
-                        st.caption(f"Posted on {post[14] if len(post) > 14 else 'Unknown date'}")
+            cols = st.columns(3)
+            for idx, post in enumerate(user_posts):
+                if len(post) > 3:
+                    with cols[idx % 3]:
+                        if post[3]:  # media_type
+                            if post[4]:  # media_data
+                                try:
+                                    if 'image' in post[3]:
+                                        st.image(post[4], use_container_width=True)
+                                    elif 'video' in post[3]:
+                                        if post[5]:  # thumbnail
+                                            st.image(post[5], use_container_width=True)
+                                except:
+                                    pass
+                        else:
+                            st.markdown(f"<div class='post-card'>{post[2][:100]}</div>", unsafe_allow_html=True)
 
 def messages_page():
     """Messages page for chatting with other users"""
@@ -1097,10 +1184,9 @@ def show_login_page():
         tab1, tab2 = st.tabs(["Login", "Sign Up"])
         
         with tab1:
-            st.info("**Demo Credentials:**\n- Username: `demo`\n- Password: `demo123`")
             with st.form("login_form"):
-                username = st.text_input("Username", placeholder="@username", value="demo")
-                password = st.text_input("Password", type="password", placeholder="••••••••", value="demo123")
+                username = st.text_input("Username", placeholder="@username")
+                password = st.text_input("Password", type="password", placeholder="••••••••")
                 submit = st.form_submit_button("Login", use_container_width=True)
                 
                 if submit:
@@ -1124,19 +1210,23 @@ def show_login_page():
                 new_password = st.text_input("Password", type="password", placeholder="••••••••")
                 confirm_password = st.text_input("Confirm Password", type="password", placeholder="••••••••")
                 email = st.text_input("Email", placeholder="email@example.com")
+                display_name = st.text_input("Display Name", placeholder="Your Name (optional)")
                 
                 if st.form_submit_button("Create Account", use_container_width=True):
                     if new_username and new_password and email:
                         if new_password == confirm_password:
-                            success, result = create_user_secure(new_username, new_password, email)
-                            if success:
-                                st.success("Account created! Please login.")
+                            if len(new_password) >= 6:
+                                success, result = create_user_secure(new_username, new_password, email, display_name)
+                                if success:
+                                    st.success("✅ Account created! Please login.")
+                                else:
+                                    st.error(result)
                             else:
-                                st.error(result)
+                                st.error("Password must be at least 6 characters")
                         else:
                             st.error("Passwords don't match")
                     else:
-                        st.error("Please fill all fields")
+                        st.error("Please fill all required fields")
 
 # ===================================
 # RUN THE APP
