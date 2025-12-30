@@ -77,7 +77,7 @@ def init_simple_db():
         )
         """)
 
-        # Posts table
+        # Posts table (simplified)
         c.execute("""
         CREATE TABLE IF NOT EXISTS posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +85,6 @@ def init_simple_db():
             content TEXT NOT NULL,
             media_type TEXT,
             media_data BLOB,
-            thumbnail BLOB,
             location TEXT DEFAULT 'Unknown',
             language TEXT DEFAULT 'en',
             visibility TEXT DEFAULT 'public',
@@ -168,45 +167,11 @@ def init_simple_db():
         )
         """)
 
-        # Create indexes
-        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_likes_post ON likes(post_id)")
-        
         conn.commit()
         return conn
     except Exception as e:
-        st.error(f"Database initialization error: {str(e)}")
+        print(f"Database initialization error: {str(e)}")
         return sqlite3.connect("feedchat.db", check_same_thread=False)
-
-def create_thumbnail_for_video(video_bytes):
-    """Create a thumbnail for video (placeholder)"""
-    try:
-        # For now, create a simple image thumbnail
-        img = Image.new('RGB', (320, 180), color=(40, 40, 40))
-        draw = ImageDraw.Draw(img)
-        
-        # Draw a play button
-        draw.polygon([(140, 80), (140, 100), (160, 90)], fill=(255, 0, 80))
-        
-        # Convert to bytes
-        img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='JPEG')
-        return img_byte_arr.getvalue()
-    except:
-        return None
-
-def create_thumbnail_for_image(image_bytes):
-    """Create thumbnail for image"""
-    try:
-        img = Image.open(io.BytesIO(image_bytes))
-        img.thumbnail((320, 320))  # Create thumbnail
-        img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='JPEG')
-        return img_byte_arr.getvalue()
-    except:
-        return None
 
 # Initialize database
 conn = init_simple_db()
@@ -478,7 +443,7 @@ def get_messages(user_id, other_user_id, limit=50):
         return []
 
 # ===================================
-# POST FUNCTIONS
+# POST FUNCTIONS (SIMPLIFIED)
 # ===================================
 
 def create_post(user_id, content, media_data=None, media_type=None, location=None, language="en", visibility="public"):
@@ -492,19 +457,11 @@ def create_post(user_id, content, media_data=None, media_type=None, location=Non
         # Extract hashtags
         hashtags_str = extract_hashtags_string(content)
         
-        # Create thumbnail if media is provided
-        thumbnail = None
-        if media_data and media_type:
-            if 'image' in media_type:
-                thumbnail = create_thumbnail_for_image(media_data)
-            elif 'video' in media_type:
-                thumbnail = create_thumbnail_for_video(media_data)
-        
         c.execute("""
             INSERT INTO posts 
-            (user_id, content, media_type, media_data, thumbnail, location, language, visibility, hashtags) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, content, media_type, media_data, thumbnail, location, language, visibility, hashtags_str))
+            (user_id, content, media_type, media_data, location, language, visibility, hashtags) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, content, media_type, media_data, location, language, visibility, hashtags_str))
         
         post_id = c.lastrowid
         
@@ -516,76 +473,51 @@ def create_post(user_id, content, media_data=None, media_type=None, location=Non
     except sqlite3.Error as e:
         return False, f"Post creation failed: {str(e)}"
 
-def get_posts(limit=20, user_id=None):
-    """Get posts with filtering"""
+def get_posts_simple(limit=20, user_id=None):
+    """Get posts with simplified query"""
     try:
         c = conn.cursor()
-        
-        query = """
-            SELECT p.*, u.username, u.profile_pic, u.display_name,
-                   (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-                   (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count
-            FROM posts p
-            JOIN users u ON p.user_id = u.id
-            WHERE p.is_deleted = 0
-        """
-        params = []
         
         if user_id:
-            query += " AND p.user_id = ?"
-            params.append(user_id)
+            c.execute("""
+                SELECT p.*, u.username, u.display_name
+                FROM posts p
+                JOIN users u ON p.user_id = u.id
+                WHERE p.is_deleted = 0 AND p.user_id = ?
+                ORDER BY p.created_at DESC
+                LIMIT ?
+            """, (user_id, limit))
+        else:
+            c.execute("""
+                SELECT p.*, u.username, u.display_name
+                FROM posts p
+                JOIN users u ON p.user_id = u.id
+                WHERE p.is_deleted = 0 AND p.visibility = 'public'
+                ORDER BY p.created_at DESC
+                LIMIT ?
+            """, (limit,))
         
-        query += """
-            ORDER BY p.created_at DESC
-            LIMIT ?
-        """
-        params.append(limit)
-        
-        c.execute(query, params)
         return c.fetchall()
-    except sqlite3.Error as e:
+    except Exception as e:
+        print(f"Error getting posts: {e}")
         return []
 
-def get_for_you_posts(user_id, limit=20):
-    """Get personalized feed"""
+def get_post_stats(post_id):
+    """Get like and comment counts for a post"""
     try:
         c = conn.cursor()
         
-        query = """
-            SELECT p.*, u.username, u.profile_pic, u.display_name,
-                   (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-                   (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count
-            FROM posts p
-            JOIN users u ON p.user_id = u.id
-            WHERE p.is_deleted = 0 AND p.visibility = 'public'
-            ORDER BY p.created_at DESC
-            LIMIT ?
-        """
+        # Get like count
+        c.execute("SELECT COUNT(*) FROM likes WHERE post_id = ?", (post_id,))
+        like_count = c.fetchone()[0] or 0
         
-        c.execute(query, (limit,))
-        posts = c.fetchall()
+        # Get comment count
+        c.execute("SELECT COUNT(*) FROM comments WHERE post_id = ?", (post_id,))
+        comment_count = c.fetchone()[0] or 0
         
-        return posts
-    except sqlite3.Error as e:
-        return []
-
-def get_trending_hashtags(limit=10):
-    """Get trending hashtags"""
-    try:
-        c = conn.cursor()
-        c.execute("""
-            SELECT 
-                TRIM(REPLACE(REPLACE(hashtags, '#', ''), ' ', '')) as tag,
-                COUNT(*) as post_count
-            FROM posts 
-            WHERE hashtags != '' 
-            GROUP BY tag 
-            ORDER BY post_count DESC 
-            LIMIT ?
-        """, (limit,))
-        return c.fetchall()
+        return like_count, comment_count
     except:
-        return []
+        return 0, 0
 
 def like_post(user_id, post_id):
     """Like a post"""
@@ -683,6 +615,24 @@ def is_following(follower_id, following_id):
     except:
         return False
 
+def get_trending_hashtags(limit=10):
+    """Get trending hashtags"""
+    try:
+        c = conn.cursor()
+        c.execute("""
+            SELECT 
+                TRIM(REPLACE(REPLACE(hashtags, '#', ''), ' ', '')) as tag,
+                COUNT(*) as post_count
+            FROM posts 
+            WHERE hashtags != '' 
+            GROUP BY tag 
+            ORDER BY post_count DESC 
+            LIMIT ?
+        """, (limit,))
+        return c.fetchall()
+    except:
+        return []
+
 # ===================================
 # MEDIA DISPLAY FUNCTIONS
 # ===================================
@@ -703,15 +653,15 @@ def display_media(media_data, media_type, caption=""):
         return False
 
 # ===================================
-# PAGE FUNCTIONS
+# PAGE FUNCTIONS (FIXED)
 # ===================================
 
 def feed_page():
-    """Feed Chat vertical feed"""
+    """Feed Chat vertical feed - FIXED VERSION"""
     st.markdown("<h1 style='text-align: center;'>🎬 Your Feed</h1>", unsafe_allow_html=True)
     
     # For You feed
-    posts = get_for_you_posts(st.session_state.user_id, limit=10)
+    posts = get_posts_simple(limit=10)
     
     if not posts:
         st.info("No posts yet. Create your first post!")
@@ -719,83 +669,105 @@ def feed_page():
     
     # Display posts
     for post in posts:
-        display_feed_post(post)
+        try:
+            display_feed_post_safe(post)
+        except Exception as e:
+            st.error(f"Error displaying post: {e}")
+            continue
     
     # Load more button
     if st.button("Load More", use_container_width=True):
         st.rerun()
 
-def display_feed_post(post):
-    """Display post in Feed Chat vertical format"""
-    if len(post) < 15:
-        return
+def display_feed_post_safe(post):
+    """Display post safely without complex unpacking"""
+    try:
+        # Safe unpacking with defaults
+        post_id = post[0] if len(post) > 0 else 0
+        user_id = post[1] if len(post) > 1 else 0
+        content = post[2] if len(post) > 2 else ""
+        media_type = post[3] if len(post) > 3 else None
+        media_data = post[4] if len(post) > 4 else None
+        location = post[5] if len(post) > 5 else ""
+        language = post[6] if len(post) > 6 else "en"
+        visibility = post[7] if len(post) > 7 else "public"
+        is_deleted = post[8] if len(post) > 8 else 0
+        like_count = post[9] if len(post) > 9 else 0
+        comment_count = post[10] if len(post) > 10 else 0
+        share_count = post[11] if len(post) > 11 else 0
+        view_count = post[12] if len(post) > 12 else 0
+        hashtags = post[13] if len(post) > 13 else ""
+        created_at = post[14] if len(post) > 14 else ""
+        username = post[15] if len(post) > 15 else "Unknown"
+        display_name = post[16] if len(post) > 16 else username
         
-    post_id, user_id, content, media_type, media_data, thumbnail, location, language, visibility, is_deleted, like_count, comment_count, share_count, view_count, hashtags, created_at, username, profile_pic, display_name, post_like_count, post_comment_count = post
-    
-    with st.container():
-        st.markdown("---")
+        if is_deleted:
+            return
         
-        # User info
-        col1, col2 = st.columns([1, 10])
-        with col1:
-            if profile_pic:
-                try:
-                    st.image(profile_pic, width=40)
-                except:
-                    st.markdown(f"**@{username}**")
-            else:
+        with st.container():
+            st.markdown("---")
+            
+            # User info
+            col1, col2 = st.columns([1, 10])
+            with col1:
                 st.markdown(f"**@{username}**")
-        with col2:
-            st.markdown(f"**{display_name or username}**")
-            if location:
-                st.caption(f"📍 {location}")
-            st.caption(f"🕒 {format_tiktok_time(created_at)}")
-        
-        # Post content
-        if content:
-            st.markdown(f"**{content}**")
-        
-        # Display media if exists
-        if media_data and media_type:
-            display_media(media_data, media_type)
-        
-        # Hashtags
-        if hashtags:
-            tags = hashtags.split(',')
-            for tag in tags[:5]:
-                if tag.strip():
-                    st.markdown(f"<span class='hashtag'>#{tag.strip()}</span>", unsafe_allow_html=True)
-        
-        # Engagement buttons
-        col_a, col_b, col_c, col_d = st.columns(4)
-        
-        with col_a:
-            liked = has_liked_post(st.session_state.user_id, post_id)
-            like_text = "❤️" if not liked else "💔"
-            if st.button(f"{like_text}\n{post_like_count}", key=f"like_{post_id}", use_container_width=True):
-                if liked:
-                    unlike_post(st.session_state.user_id, post_id)
-                else:
-                    like_post(st.session_state.user_id, post_id)
-                st.rerun()
-        
-        with col_b:
-            if st.button(f"💬\n{post_comment_count}", key=f"comment_{post_id}", use_container_width=True):
-                st.info("Comment feature coming soon!")
-        
-        with col_c:
-            if st.button(f"↪️\nShare", key=f"share_{post_id}", use_container_width=True):
-                st.info("Share feature coming soon!")
-        
-        with col_d:
-            saved = is_saved(st.session_state.user_id, post_id)
-            save_text = "⬇️" if not saved else "✅"
-            if st.button(f"{save_text}", key=f"save_{post_id}", use_container_width=True):
-                if saved:
-                    unsave_post(st.session_state.user_id, post_id)
-                else:
-                    save_post(st.session_state.user_id, post_id)
-                st.rerun()
+            with col2:
+                st.markdown(f"**{display_name}**")
+                if location:
+                    st.caption(f"📍 {location}")
+                st.caption(f"🕒 {format_tiktok_time(created_at)}")
+            
+            # Post content
+            if content:
+                st.markdown(f"{content}")
+            
+            # Display media if exists
+            if media_data and media_type:
+                display_media(media_data, media_type)
+            
+            # Hashtags
+            if hashtags:
+                tags = hashtags.split(',')
+                for tag in tags[:5]:
+                    if tag.strip():
+                        st.markdown(f"<span class='hashtag'>#{tag.strip()}</span>", unsafe_allow_html=True)
+            
+            # Get current stats
+            current_likes, current_comments = get_post_stats(post_id)
+            
+            # Engagement buttons
+            col_a, col_b, col_c, col_d = st.columns(4)
+            
+            with col_a:
+                liked = has_liked_post(st.session_state.user_id, post_id)
+                like_text = "❤️" if not liked else "💔"
+                if st.button(f"{like_text}\n{current_likes}", key=f"like_{post_id}", use_container_width=True):
+                    if liked:
+                        unlike_post(st.session_state.user_id, post_id)
+                    else:
+                        like_post(st.session_state.user_id, post_id)
+                    st.rerun()
+            
+            with col_b:
+                if st.button(f"💬\n{current_comments}", key=f"comment_{post_id}", use_container_width=True):
+                    st.info("Comment feature coming soon!")
+            
+            with col_c:
+                if st.button(f"↪️\nShare", key=f"share_{post_id}", use_container_width=True):
+                    st.info("Share feature coming soon!")
+            
+            with col_d:
+                saved = is_saved(st.session_state.user_id, post_id)
+                save_text = "⬇️" if not saved else "✅"
+                if st.button(f"{save_text}", key=f"save_{post_id}", use_container_width=True):
+                    if saved:
+                        unsave_post(st.session_state.user_id, post_id)
+                    else:
+                        save_post(st.session_state.user_id, post_id)
+                    st.rerun()
+                    
+    except Exception as e:
+        st.error(f"Error displaying post: {e}")
 
 def discover_page():
     """Discover page with trending content"""
@@ -823,7 +795,9 @@ def discover_page():
     if suggested_users:
         cols = st.columns(3)
         for idx, user in enumerate(suggested_users):
-            user_id, username, profile_pic, bio, location, language, is_online = user
+            user_id = user[0] if len(user) > 0 else 0
+            username = user[1] if len(user) > 1 else "Unknown"
+            bio = user[3] if len(user) > 3 else ""
             
             with cols[idx % 3]:
                 st.markdown(f"**@{username}**")
@@ -866,6 +840,7 @@ def create_content_page():
         col1, col2 = st.columns(2)
         with col1:
             visibility = st.selectbox("Visibility", ["public", "friends", "private"])
+        
         with col2:
             if st.form_submit_button("Post", use_container_width=True):
                 if content:
@@ -896,28 +871,20 @@ def profile_page():
     user = get_user(st.session_state.user_id)
     
     if user:
-        (user_id, username, display_name, email, profile_pic, bio, location, 
-         timezone, language, is_online, last_seen, created_at, post_count, 
-         follower_count, following_count, total_likes, verified) = user
+        user_id = user[0]
+        username = user[1]
+        display_name = user[2] or username
+        bio = user[5] if len(user) > 5 else ""
+        location = user[6] if len(user) > 6 else ""
+        post_count = user[13] if len(user) > 13 else 0
+        follower_count = user[14] if len(user) > 14 else 0
+        following_count = user[15] if len(user) > 15 else 0
+        total_likes = user[16] if len(user) > 16 else 0
         
         # Profile header
         col1, col2 = st.columns([1, 3])
-        with col1:
-            if profile_pic:
-                try:
-                    st.image(profile_pic, width=100)
-                except:
-                    st.markdown(f"""
-                    <div style='width: 100px; height: 100px; border-radius: 50%; 
-                                background: linear-gradient(45deg, #FF0050, #00F2EA);
-                                display: flex; align-items: center; justify-content: center; 
-                                color: white; font-size: 48px; font-weight: bold;'>
-                        {(display_name or username)[0].upper()}
-                    </div>
-                    """, unsafe_allow_html=True)
-        
         with col2:
-            st.markdown(f"# {display_name or username}")
+            st.markdown(f"# {display_name}")
             st.markdown(f"@{username}")
             
             if bio:
@@ -939,12 +906,12 @@ def profile_page():
         
         # User's posts
         st.markdown("### 📸 Your Posts")
-        user_posts = get_posts(user_id=st.session_state.user_id, limit=12)
+        user_posts = get_posts_simple(user_id=st.session_state.user_id, limit=12)
         
         if user_posts:
             cols = st.columns(3)
             for idx, post in enumerate(user_posts):
-                if len(post) > 3:
+                if len(post) > 4:
                     with cols[idx % 3]:
                         if post[3]:  # media_type
                             if post[4]:  # media_data
@@ -952,12 +919,11 @@ def profile_page():
                                     if 'image' in post[3]:
                                         st.image(post[4], use_container_width=True)
                                     elif 'video' in post[3]:
-                                        if post[5]:  # thumbnail
-                                            st.image(post[5], use_container_width=True)
+                                        st.video(post[4])
                                 except:
-                                    pass
+                                    st.markdown(f"<div class='post-card'>{post[2][:100] if len(post) > 2 else 'Post'}</div>", unsafe_allow_html=True)
                         else:
-                            st.markdown(f"<div class='post-card'>{post[2][:100]}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div class='post-card'>{post[2][:100] if len(post) > 2 else 'Post'}</div>", unsafe_allow_html=True)
 
 def messages_page():
     """Messages page for chatting with other users"""
@@ -978,11 +944,13 @@ def messages_page():
         # Display conversations
         if conversations:
             for conv in conversations:
-                other_user_id, username, profile_pic, last_time, last_msg, unread = conv
-                
-                if st.button(f"@{username}", key=f"conv_{other_user_id}", use_container_width=True):
-                    st.session_state.current_chat = other_user_id
-                    st.rerun()
+                if len(conv) > 1:
+                    username = conv[1]
+                    other_user_id = conv[0]
+                    
+                    if st.button(f"@{username}", key=f"conv_{other_user_id}", use_container_width=True):
+                        st.session_state.current_chat = other_user_id
+                        st.rerun()
     
     with col2:
         if st.session_state.get('current_chat'):
@@ -990,51 +958,54 @@ def messages_page():
             other_user = get_user(st.session_state.current_chat)
             
             if other_user:
-                other_user_id, other_username = other_user[0], other_user[1]
+                other_username = other_user[1]
                 
                 # Chat header
                 st.markdown(f"### Chat with @{other_username}")
                 
                 # Messages container
-                messages = get_messages(st.session_state.user_id, other_user_id)
+                messages = get_messages(st.session_state.user_id, st.session_state.current_chat)
                 
                 # Display messages
                 for msg in reversed(messages):
-                    msg_id, sender_id, receiver_id, content, msg_type, media_data, is_read, created_at, sender_username = msg
-                    
-                    is_sent = sender_id == st.session_state.user_id
-                    
-                    if is_sent:
-                        st.markdown(f"""
-                        <div style='text-align: right; margin: 5px;'>
-                            <div style='display: inline-block; background: linear-gradient(45deg, #FF0050, #00F2EA); 
-                                    color: white; padding: 10px 15px; border-radius: 18px 18px 4px 18px;'>
-                                {content}
+                    if len(msg) > 3:
+                        content = msg[3]
+                        sender_id = msg[1]
+                        created_at = msg[7] if len(msg) > 7 else ""
+                        
+                        is_sent = sender_id == st.session_state.user_id
+                        
+                        if is_sent:
+                            st.markdown(f"""
+                            <div style='text-align: right; margin: 5px;'>
+                                <div style='display: inline-block; background: linear-gradient(45deg, #FF0050, #00F2EA); 
+                                        color: white; padding: 10px 15px; border-radius: 18px 18px 4px 18px;'>
+                                    {content}
+                                </div>
+                                <div style='font-size: 0.8em; color: #888; text-align: right;'>
+                                    {format_tiktok_time(created_at)}
+                                </div>
                             </div>
-                            <div style='font-size: 0.8em; color: #888; text-align: right;'>
-                                {format_tiktok_time(created_at)}
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div style='text-align: left; margin: 5px;'>
+                                <div style='display: inline-block; background: #333; 
+                                        color: white; padding: 10px 15px; border-radius: 18px 18px 18px 4px;'>
+                                    {content}
+                                </div>
+                                <div style='font-size: 0.8em; color: #888;'>
+                                    {format_tiktok_time(created_at)}
+                                </div>
                             </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"""
-                        <div style='text-align: left; margin: 5px;'>
-                            <div style='display: inline-block; background: #333; 
-                                    color: white; padding: 10px 15px; border-radius: 18px 18px 18px 4px;'>
-                                {content}
-                            </div>
-                            <div style='font-size: 0.8em; color: #888;'>
-                                {format_tiktok_time(created_at)}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                            """, unsafe_allow_html=True)
                 
                 # Message input
                 with st.form("chat_form", clear_on_submit=True):
                     message = st.text_input("Type your message...", key="message_input")
                     if st.form_submit_button("Send", use_container_width=True):
                         if message:
-                            success, result = send_message(st.session_state.user_id, other_user_id, message)
+                            success, result = send_message(st.session_state.user_id, st.session_state.current_chat, message)
                             if success:
                                 st.rerun()
                             else:
@@ -1049,7 +1020,10 @@ def messages_page():
                 
                 # Get all users except current user
                 users = get_global_users()
-                user_options = {f"{u[1]}": u[0] for u in users if u[0] != st.session_state.user_id}
+                user_options = {}
+                for u in users:
+                    if len(u) > 1:
+                        user_options[f"{u[1]}"] = u[0]
                 
                 if user_options:
                     selected_user_label = st.selectbox("Select User", list(user_options.keys()))
@@ -1101,7 +1075,6 @@ def main():
         'user_id': None,
         'username': None,
         'current_page': 'feed',
-        'editing_profile': False,
         'current_chat': None,
         'new_message': False
     }
@@ -1143,12 +1116,12 @@ def main():
         
         # Quick stats
         user_data = get_user(st.session_state.user_id)
-        if user_data:
+        if user_data and len(user_data) > 13:
             col1, col2 = st.columns(2)
             with col1:
                 st.metric("Posts", user_data[13])
             with col2:
-                st.metric("Likes", user_data[16])
+                st.metric("Likes", user_data[16] if len(user_data) > 16 else 0)
         
         st.markdown("---")
         
@@ -1160,18 +1133,22 @@ def main():
             st.rerun()
     
     # Main content based on current page
-    if st.session_state.current_page == "feed":
-        feed_page()
-    elif st.session_state.current_page == "discover":
-        discover_page()
-    elif st.session_state.current_page == "create":
-        create_content_page()
-    elif st.session_state.current_page == "messages":
-        messages_page()
-    elif st.session_state.current_page == "profile":
-        profile_page()
-    else:
-        feed_page()
+    try:
+        if st.session_state.current_page == "feed":
+            feed_page()
+        elif st.session_state.current_page == "discover":
+            discover_page()
+        elif st.session_state.current_page == "create":
+            create_content_page()
+        elif st.session_state.current_page == "messages":
+            messages_page()
+        elif st.session_state.current_page == "profile":
+            profile_page()
+        else:
+            feed_page()
+    except Exception as e:
+        st.error(f"Error loading page: {e}")
+        st.info("Please try refreshing the page")
 
 def show_login_page():
     """Show login page"""
