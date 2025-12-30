@@ -20,7 +20,7 @@ import secrets
 
 # Configuration for cloud deployment
 CLOUD_CONFIG = {
-    "app_name": "GlobalFeedChat",
+    "app_name": "FeedChat",
     "version": "2.0",
     "deployment_ready": True,
     "max_file_size": 50 * 1024 * 1024,  # 50MB
@@ -70,7 +70,7 @@ def optimize_image_for_web(image_data, max_size=(1200, 1200), quality=85):
 
 def init_simple_db():
     """Initialize database with essential tables"""
-    conn = sqlite3.connect("global_social.db", check_same_thread=False)
+    conn = sqlite3.connect("feed_chat.db", check_same_thread=False)
     c = conn.cursor()
 
     # Users table
@@ -708,8 +708,8 @@ def inject_custom_css():
 
 def login_page():
     """Login page"""
-    st.markdown("<h1 class='gradient-text'>🌍 Global Social</h1>", unsafe_allow_html=True)
-    st.markdown("### Connect with people worldwide!")
+    st.markdown("<h1 class='gradient-text'>📱 Feed Chat</h1>", unsafe_allow_html=True)
+    st.markdown("### Share posts and chat with people worldwide!")
     
     tab1, tab2 = st.tabs(["🚀 Sign In", "✨ Create Account"])
     
@@ -717,7 +717,7 @@ def login_page():
         with st.form("login_form"):
             username = st.text_input("👤 Username")
             password = st.text_input("🔒 Password", type="password")
-            submit = st.form_submit_button("🌍 Sign In")
+            submit = st.form_submit_button("📱 Sign In")
             
             if submit:
                 if username and password:
@@ -759,7 +759,7 @@ def login_page():
             
             profile_pic = st.file_uploader("🖼️ Profile Picture (Optional)", type=['jpg', 'png', 'jpeg'])
             
-            register = st.form_submit_button("🌍 Join Global Network")
+            register = st.form_submit_button("📱 Join Feed Chat")
             
             if register:
                 if new_username and new_password and email:
@@ -780,9 +780,9 @@ def login_page():
                 else:
                     st.error("⚠️ Please fill in required fields")
 
-def global_feed_page():
-    """Global feed page"""
-    st.markdown("<h1 class='gradient-text'>🌍 Global Feed</h1>", unsafe_allow_html=True)
+def feed_page():
+    """Feed page"""
+    st.markdown("<h1 class='gradient-text'>📰 Feed</h1>", unsafe_allow_html=True)
     
     # Refresh button
     if st.button("🔄 Refresh Feed"):
@@ -802,7 +802,7 @@ def global_feed_page():
             media_file = st.file_uploader("📁 Add Media", type=['jpg', 'png', 'jpeg', 'mp4'])
             post_location = st.text_input("📍 Location", value=st.session_state.get('location', 'Unknown'))
             
-            if st.form_submit_button("🚀 Publish Globally"):
+            if st.form_submit_button("🚀 Publish Post"):
                 if content:
                     media_data = None
                     media_type = None
@@ -816,13 +816,13 @@ def global_feed_page():
                     )
                     
                     if post_id:
-                        st.success("🌍 Post published!")
+                        st.success("📱 Post published!")
                         st.rerun()
                 else:
                     st.error("Please enter some content for your post")
     
     # Display posts
-    st.markdown("### 📰 Recent Posts from Around the World")
+    st.markdown("### 📰 Recent Posts")
     
     posts = get_global_posts(language=language_filter, location=location_filter)
     
@@ -944,9 +944,9 @@ def display_post_card(post):
                         st.markdown(f"**{comment_username}**: {comment_content}")
                         st.caption(f"_{format_global_time(comment_created_at)}_")
 
-def messaging_page():
-    """Messaging page"""
-    st.markdown("<h1 class='gradient-text'>💬 Global Chat</h1>", unsafe_allow_html=True)
+def chat_page():
+    """Chat page"""
+    st.markdown("<h1 class='gradient-text'>💬 Chat</h1>", unsafe_allow_html=True)
     
     if st.button("🔄 Refresh Messages"):
         st.rerun()
@@ -1065,7 +1065,7 @@ def display_chat_messages():
 
 def display_user_directory():
     """Display user directory"""
-    st.markdown("### 👥 Global Users")
+    st.markdown("### 👥 Users")
     
     search = st.text_input("🔍 Search users...")
     location_filter = st.text_input("📍 Filter by location...")
@@ -1207,7 +1207,7 @@ def main():
             st.session_state[key] = default
     
     # App header
-    st.sidebar.markdown("<h1 class='gradient-text'>🌍 Global Social</h1>", unsafe_allow_html=True)
+    st.sidebar.markdown("<h1 class='gradient-text'>📱 Feed Chat</h1>", unsafe_allow_html=True)
     
     if not st.session_state.logged_in:
         login_page()
@@ -1217,14 +1217,14 @@ def main():
     st.sidebar.markdown(f"### 👋 Welcome, {st.session_state.username}!")
     
     menu = st.sidebar.selectbox("Navigation", [
-        "🏠 Global Feed",
-        "💬 Global Chat", 
-        "👤 My Profile"
+        "📰 Feed",
+        "💬 Chat", 
+        "👤 Profile"
     ])
     
     # Stats
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🌐 Quick Stats")
+    st.sidebar.markdown("### 📊 Quick Stats")
     online_count = len(get_online_users())
     st.sidebar.metric("👥 Online Now", online_count)
     
@@ -1246,11 +1246,11 @@ def main():
         st.rerun()
     
     # Display selected page
-    if menu == "🏠 Global Feed":
-        global_feed_page()
-    elif menu == "💬 Global Chat":
-        messaging_page()
-    elif menu == "👤 My Profile":
+    if menu == "📰 Feed":
+        feed_page()
+    elif menu == "💬 Chat":
+        chat_page()
+    elif menu == "👤 Profile":
         profile_page()
 
 if __name__ == "__main__":
