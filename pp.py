@@ -3,7 +3,7 @@ import sqlite3
 import datetime
 import random
 import time
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 import io
 import base64
 import json
@@ -11,7 +11,6 @@ import re
 import uuid
 import hashlib
 import secrets
-import numpy as np
 
 # ===================================
 # TIKTOK-INSPIRED THEME CONFIGURATION
@@ -79,57 +78,23 @@ def format_tiktok_time(timestamp):
     except:
         return "Just now"
 
-def optimize_media_for_mobile(media_data, media_type, max_size=(1080, 1920)):
-    """Optimize media for mobile viewing"""
-    try:
-        if not media_data or not isinstance(media_data, bytes):
-            return media_data
-            
-        if 'image' in media_type:
-            image = Image.open(io.BytesIO(media_data))
-            
-            # Resize for mobile optimization
-            image.thumbnail(max_size, Image.Resampling.LANCZOS)
-            
-            # Convert to RGB if necessary
-            if image.mode in ('RGBA', 'P'):
-                image = image.convert('RGB')
-            
-            # Compress
-            output = io.BytesIO()
-            image.save(output, format='JPEG', quality=85, optimize=True)
-            return output.getvalue()
-            
-        elif 'video' in media_type:
-            # For videos, we'll just limit size
-            if len(media_data) > THEME_CONFIG["max_file_size"]:
-                st.warning("Video too large. Please upload a smaller video.")
-                return None
-            return media_data
-            
-    except Exception as e:
-        st.warning(f"Media optimization failed: {e}")
-        return media_data
-    
-    return media_data
-
 # ===================================
-# FIXED DATABASE INITIALIZATION
+# SIMPLIFIED DATABASE SETUP
 # ===================================
 
-def init_tiktok_db():
-    """Initialize database with TikTok-like features"""
+def init_simple_db():
+    """Initialize database with essential tables"""
     conn = sqlite3.connect("clipsphere.db", check_same_thread=False)
     c = conn.cursor()
 
-    # Users table with TikTok features
+    # Users table
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
         display_name TEXT,
         password_hash TEXT,
-        email TEXT UNIQUE,
+        email TEXT,
         profile_pic BLOB,
         bio TEXT,
         location TEXT DEFAULT 'Unknown',
@@ -143,13 +108,11 @@ def init_tiktok_db():
         follower_count INTEGER DEFAULT 0,
         following_count INTEGER DEFAULT 0,
         total_likes INTEGER DEFAULT 0,
-        verified BOOLEAN DEFAULT FALSE,
-        private_account BOOLEAN DEFAULT FALSE,
-        tiktok_style TEXT DEFAULT 'default'
+        verified BOOLEAN DEFAULT FALSE
     )
     """)
 
-    # Posts table with enhanced engagement
+    # Posts table
     c.execute("""
     CREATE TABLE IF NOT EXISTS posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -157,8 +120,6 @@ def init_tiktok_db():
         content TEXT,
         media_type TEXT,
         media_data BLOB,
-        thumbnail BLOB,
-        duration INTEGER DEFAULT 0,
         location TEXT DEFAULT 'Unknown',
         language TEXT DEFAULT 'en',
         visibility TEXT DEFAULT 'public',
@@ -167,240 +128,155 @@ def init_tiktok_db():
         comment_count INTEGER DEFAULT 0,
         share_count INTEGER DEFAULT 0,
         view_count INTEGER DEFAULT 0,
-        save_count INTEGER DEFAULT 0,
-        duet_count INTEGER DEFAULT 0,
-        stitch_count INTEGER DEFAULT 0,
-        sound_id INTEGER DEFAULT NULL,
-        effect_id INTEGER DEFAULT NULL,
         hashtags TEXT DEFAULT '',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-    """)
-
-    # Sounds table (TikTok-like)
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS sounds (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        artist TEXT,
-        audio_data BLOB,
-        duration INTEGER,
-        use_count INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
-    # Effects table (TikTok-like)
+    # Messages table
     c.execute("""
-    CREATE TABLE IF NOT EXISTS effects (
+    CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        description TEXT,
-        effect_data BLOB,
-        use_count INTEGER DEFAULT 0,
+        sender_id INTEGER,
+        receiver_id INTEGER,
+        content TEXT,
+        message_type TEXT DEFAULT 'text',
+        media_data BLOB,
+        is_read BOOLEAN DEFAULT FALSE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
-    # Hashtags table
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS hashtags (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tag TEXT UNIQUE,
-        post_count INTEGER DEFAULT 0,
-        trend_score INTEGER DEFAULT 0
-    )
-    """)
-
-    # Post-Hashtag relationship
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS post_hashtags (
-        post_id INTEGER,
-        hashtag_id INTEGER,
-        PRIMARY KEY (post_id, hashtag_id),
-        FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
-        FOREIGN KEY (hashtag_id) REFERENCES hashtags(id) ON DELETE CASCADE
-    )
-    """)
-
-    # Enhanced likes with reactions
+    # Likes table
     c.execute("""
     CREATE TABLE IF NOT EXISTS likes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         post_id INTEGER,
-        reaction_type TEXT DEFAULT 'like',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, post_id),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
-    # Comments with replies
+    # Comments table
     c.execute("""
     CREATE TABLE IF NOT EXISTS comments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         post_id INTEGER,
         user_id INTEGER,
         content TEXT,
-        parent_id INTEGER DEFAULT NULL,
-        like_count INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (parent_id) REFERENCES comments(id) ON DELETE CASCADE
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
-    # Saves/Bookmarks
+    # Saves table
     c.execute("""
     CREATE TABLE IF NOT EXISTS saves (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         post_id INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, post_id),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
-    # Follow relationships
+    # Follows table
     c.execute("""
     CREATE TABLE IF NOT EXISTS follows (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         follower_id INTEGER,
         following_id INTEGER,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(follower_id, following_id),
-        FOREIGN KEY (follower_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (following_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-    """)
-
-    # For You Page algorithm tracking - FIXED SYNTAX
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS user_interactions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        post_id INTEGER,
-        interaction_type TEXT,
-        duration INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
     # Create indexes
-    try:
-        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_trending ON posts(like_count, view_count, created_at)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id, created_at)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_user_interactions ON user_interactions(user_id, interaction_type, created_at)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_hashtags_trending ON hashtags(trend_score DESC)")
-    except:
-        pass  # Indexes might already exist
-    
-    # Triggers - simplified to avoid syntax errors
-    try:
-        c.execute("""
-        CREATE TRIGGER IF NOT EXISTS update_post_counts
-        AFTER INSERT ON posts
-        FOR EACH ROW
-        BEGIN
-            UPDATE users SET post_count = post_count + 1 WHERE id = NEW.user_id;
-        END;
-        """)
-    except:
-        pass
+    c.execute("CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_messages_users ON messages(sender_id, receiver_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_likes_post ON likes(post_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_follows ON follows(follower_id, following_id)")
 
     conn.commit()
     return conn
 
 # Initialize database
-conn = init_tiktok_db()
+conn = init_simple_db()
 
 # ===================================
-# TIKTOK-STYLE CORE FUNCTIONS
+# CORE FUNCTIONS
 # ===================================
+
+def is_valid_image(image_data):
+    """Check if the image data is valid"""
+    try:
+        if image_data is None:
+            return False
+        if isinstance(image_data, str):
+            try:
+                image_data = base64.b64decode(image_data)
+            except:
+                return False
+        if not isinstance(image_data, bytes):
+            return False
+        image = Image.open(io.BytesIO(image_data))
+        image.verify()
+        return True
+    except:
+        return False
+
+def display_image_safely(image_data, caption="", width=None, use_container_width=False):
+    """Safely display an image with error handling"""
+    try:
+        if image_data:
+            if isinstance(image_data, str):
+                try:
+                    image_data = base64.b64decode(image_data)
+                except:
+                    st.warning("Invalid image format")
+                    return
+            
+            if not isinstance(image_data, bytes):
+                st.warning("Invalid image format")
+                return
+                
+            if is_valid_image(image_data):
+                img = Image.open(io.BytesIO(image_data))
+                if width:
+                    st.image(img, caption=caption, width=width, output_format='JPEG')
+                elif use_container_width:
+                    st.image(img, caption=caption, use_container_width=True, output_format='JPEG')
+                else:
+                    st.image(img, caption=caption, output_format='JPEG')
+            else:
+                st.warning("Unable to display image: Invalid image data")
+    except Exception as e:
+        st.warning(f"Error displaying image: {str(e)}")
 
 def extract_hashtags(text):
     """Extract hashtags from text"""
     hashtags = re.findall(r'#(\w+)', text)
     return list(set(hashtags))  # Remove duplicates
 
-def create_thumbnail(video_data):
-    """Create thumbnail from video (placeholder - in real app use video processing)"""
-    try:
-        # Create a simple gradient thumbnail
-        img = Image.new('RGB', (1080, 1920), color='black')
-        draw = ImageDraw.Draw(img)
-        
-        # Add gradient
-        for i in range(1920):
-            r = int(255 * i / 1920)
-            g = int(100 * i / 1920)
-            b = int(200 * i / 1920)
-            draw.line([(0, i), (1080, i)], fill=(r, g, b))
-        
-        # Add play icon
-        draw.polygon([(500, 800), (500, 1120), (800, 960)], fill='white')
-        
-        output = io.BytesIO()
-        img.save(output, format='JPEG', quality=85)
-        return output.getvalue()
-    except:
-        return None
-
 def get_for_you_posts(user_id, limit=20):
     """Get personalized feed similar to TikTok's For You Page"""
     try:
         c = conn.cursor()
         
-        # Simple algorithm: mix of trending and followed users
+        # Get posts from followed users and trending posts
         query = """
             SELECT p.*, u.username, u.profile_pic, u.display_name,
                    (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-                   (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-                   (SELECT COUNT(*) FROM saves WHERE post_id = p.id) as save_count
+                   (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count
             FROM posts p
             JOIN users u ON p.user_id = u.id
             WHERE p.is_deleted = 0 AND p.visibility = 'public'
-            AND (
-                p.user_id IN (SELECT following_id FROM follows WHERE follower_id = ?)
-                OR p.like_count > 10
-                OR p.view_count > 50
-            )
             ORDER BY 
                 CASE WHEN p.user_id IN (SELECT following_id FROM follows WHERE follower_id = ?) THEN 1 ELSE 2 END,
-                (p.like_count * 0.4 + p.view_count * 0.3 + p.comment_count * 0.2 + p.save_count * 0.1) DESC,
+                p.like_count DESC,
                 p.created_at DESC
             LIMIT ?
         """
         
-        c.execute(query, (user_id, user_id, limit))
+        c.execute(query, (user_id, limit))
         posts = c.fetchall()
-        
-        # If not enough posts, add trending posts
-        if len(posts) < limit:
-            query_trending = """
-                SELECT p.*, u.username, u.profile_pic, u.display_name,
-                       (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-                       (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-                       (SELECT COUNT(*) FROM saves WHERE post_id = p.id) as save_count
-                FROM posts p
-                JOIN users u ON p.user_id = u.id
-                WHERE p.is_deleted = 0 AND p.visibility = 'public'
-                ORDER BY (p.like_count * 0.4 + p.view_count * 0.3 + p.comment_count * 0.2) DESC,
-                         p.created_at DESC
-                LIMIT ?
-            """
-            c.execute(query_trending, (limit - len(posts),))
-            trending_posts = c.fetchall()
-            posts.extend(trending_posts)
         
         return posts
     except sqlite3.Error as e:
@@ -411,10 +287,15 @@ def get_trending_hashtags(limit=10):
     """Get trending hashtags"""
     try:
         c = conn.cursor()
+        # Simple implementation - count hashtags in posts
         c.execute("""
-            SELECT tag, post_count, trend_score 
-            FROM hashtags 
-            ORDER BY trend_score DESC, post_count DESC 
+            SELECT 
+                TRIM(REPLACE(REPLACE(hashtags, '#', ''), ' ', '')) as tag,
+                COUNT(*) as post_count
+            FROM posts 
+            WHERE hashtags != '' 
+            GROUP BY tag 
+            ORDER BY post_count DESC 
             LIMIT ?
         """, (limit,))
         return c.fetchall()
@@ -531,7 +412,7 @@ def get_online_users():
     except:
         return []
 
-def get_global_users(search_term=None, location_filter=None, limit=50):
+def get_global_users(search_term=None, limit=50):
     """Get global users with filtering"""
     try:
         c = conn.cursor()
@@ -542,10 +423,6 @@ def get_global_users(search_term=None, location_filter=None, limit=50):
         if search_term:
             query += " AND (username LIKE ? OR bio LIKE ?)"
             params.extend([f'%{search_term}%', f'%{search_term}%'])
-        
-        if location_filter:
-            query += " AND location LIKE ?"
-            params.append(f'%{location_filter}%')
         
         query += " ORDER BY is_online DESC, username ASC LIMIT ?"
         params.append(limit)
@@ -560,34 +437,30 @@ def create_post(user_id, content, media_data=None, media_type=None, location=Non
     try:
         if not content or len(content.strip()) == 0:
             return False, "Post content cannot be empty"
-        if len(content) > 10000:
-            return False, "Post content too long (max 10,000 characters)"
             
         c = conn.cursor()
         
-        # Get user location if not provided
-        if not location:
-            user = get_user(user_id)
-            if user:
-                location = user[7]  # location field
-        
-        # Optimize media for web
-        if media_data and media_type and 'image' in media_type:
-            media_data = optimize_media_for_mobile(media_data, media_type)
+        # Extract hashtags
+        hashtags_list = extract_hashtags(content)
+        hashtags_str = ",".join(hashtags_list[:10])  # Limit to 10 hashtags
         
         c.execute("""
             INSERT INTO posts 
-            (user_id, content, media_type, media_data, location, language, visibility) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (user_id, content, media_type, media_data, location, language, visibility))
+            (user_id, content, media_type, media_data, location, language, visibility, hashtags) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, content, media_type, media_data, location, language, visibility, hashtags_str))
         
         post_id = c.lastrowid
+        
+        # Update user post count
+        c.execute("UPDATE users SET post_count = post_count + 1 WHERE id = ?", (user_id,))
+        
         conn.commit()
         return True, post_id
     except sqlite3.Error as e:
         return False, f"Post creation failed: {str(e)}"
 
-def get_posts(limit=20, language=None, location=None, user_id=None):
+def get_posts(limit=20, user_id=None):
     """Get posts with filtering"""
     try:
         c = conn.cursor()
@@ -595,8 +468,7 @@ def get_posts(limit=20, language=None, location=None, user_id=None):
         query = """
             SELECT p.*, u.username, u.profile_pic, u.display_name,
                    (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
-                   (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count,
-                   (SELECT COUNT(*) FROM saves WHERE post_id = p.id) as save_count
+                   (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count
             FROM posts p
             JOIN users u ON p.user_id = u.id
             WHERE p.is_deleted = 0 AND p.visibility = 'public'
@@ -606,14 +478,6 @@ def get_posts(limit=20, language=None, location=None, user_id=None):
         if user_id:
             query += " AND p.user_id = ?"
             params.append(user_id)
-        
-        if language and language != 'all':
-            query += " AND (p.language = ? OR p.language = 'en')"
-            params.append(language)
-        
-        if location and location != 'global':
-            query += " AND (p.location LIKE ? OR u.location LIKE ?)"
-            params.extend([f'%{location}%', f'%{location}%'])
         
         query += """
             ORDER BY p.created_at DESC
@@ -632,9 +496,9 @@ def get_user(user_id):
     try:
         c = conn.cursor()
         c.execute("""
-            SELECT id, username, display_name, password_hash, email, profile_pic, bio, location, 
+            SELECT id, username, display_name, email, profile_pic, bio, location, 
                    timezone, language, is_online, last_seen, created_at, post_count, 
-                   follower_count, following_count, total_likes, verified, private_account, tiktok_style
+                   follower_count, following_count, total_likes, verified
             FROM users WHERE id=?
         """, (user_id,))
         return c.fetchone()
@@ -672,19 +536,10 @@ def create_user_secure(username, password, email, profile_pic=None, bio="", loca
         if not username or len(username) < 3:
             return False, "Username must be at least 3 characters long"
         
-        if not re.match(r'^[\w.]+$', username):
-            return False, "Username can only contain letters, numbers, dots and underscores"
-        
         # Check if user exists
         c.execute("SELECT id FROM users WHERE username=?", (username,))
         if c.fetchone():
             return False, "Username already exists"
-        
-        # Check if email exists
-        if email:
-            c.execute("SELECT id FROM users WHERE email=?", (email,))
-            if c.fetchone():
-                return False, "Email already registered"
         
         # Create user - simplified for demo
         c.execute("""
@@ -700,6 +555,17 @@ def create_user_secure(username, password, email, profile_pic=None, bio="", loca
         return False, f"Database error: {str(e)}"
     except Exception as e:
         return False, f"Error: {str(e)}"
+
+def update_user_online_status(user_id, is_online=True):
+    """Update user online status"""
+    try:
+        c = conn.cursor()
+        c.execute("UPDATE users SET is_online=?, last_seen=CURRENT_TIMESTAMP WHERE id=?", 
+                 (1 if is_online else 0, user_id))
+        conn.commit()
+        return True
+    except:
+        return False
 
 # ===================================
 # RESPONSIVE TIKTOK-STYLE UI
@@ -904,10 +770,10 @@ def tiktok_feed_page():
         st.markdown("### 🔥 Trending Now")
         cols = st.columns(len(trending_hashtags))
         for idx, hashtag in enumerate(trending_hashtags):
-            tag, count, score = hashtag
-            with cols[idx]:
+            tag, count = hashtag
+            with cols[idx % len(cols)]:
                 st.markdown(f"<div class='hashtag-chip'>#{tag}</div>", unsafe_allow_html=True)
-                st.caption(f"{count:,} posts")
+                st.caption(f"{count} posts")
     
     # For You feed
     posts = get_for_you_posts(st.session_state.user_id, limit=10)
@@ -927,14 +793,13 @@ def tiktok_feed_page():
 
 def display_tiktok_post(post):
     """Display post in TikTok vertical format"""
-    if len(post) < 30:  # Check post structure
+    if len(post) < 18:  # Check post structure
         return
         
-    (post_id, user_id, content, media_type, media_data, thumbnail, duration, location, 
-     language, visibility, is_deleted, like_count, comment_count, share_count, view_count,
-     save_count, duet_count, stitch_count, sound_id, effect_id, hashtags, created_at,
-     updated_at, username, profile_pic, display_name, post_like_count, post_comment_count,
-     post_save_count) = post[:30]  # Take first 30 elements
+    (post_id, user_id, content, media_type, media_data, location, 
+     language, visibility, is_deleted, like_count, comment_count, 
+     share_count, view_count, hashtags, created_at, username, 
+     profile_pic, display_name, post_like_count, post_comment_count) = post
     
     with st.container():
         # Video/Image container
@@ -954,7 +819,7 @@ def display_tiktok_post(post):
                         st.info("Image could not be displayed")
                 
                 # Engagement buttons
-                col_a, col_b, col_c, col_d, col_e = st.columns(5)
+                col_a, col_b, col_c, col_d = st.columns(4)
                 
                 with col_a:
                     if st.button(f"❤️\n{post_like_count}", key=f"like_{post_id}", use_container_width=True):
@@ -973,7 +838,7 @@ def display_tiktok_post(post):
                 with col_d:
                     saved = is_saved(st.session_state.user_id, post_id)
                     save_text = "⬇️" if not saved else "✅"
-                    if st.button(f"{save_text}\n{post_save_count}", key=f"save_{post_id}", use_container_width=True):
+                    if st.button(f"{save_text}", key=f"save_{post_id}", use_container_width=True):
                         if saved:
                             unsave_post(st.session_state.user_id, post_id)
                         else:
@@ -986,7 +851,7 @@ def display_tiktok_post(post):
         with col1:
             if profile_pic:
                 try:
-                    st.image(profile_pic, width=50)
+                    display_image_safely(profile_pic, width=50)
                 except:
                     st.markdown(f"""
                     <div style='width: 50px; height: 50px; border-radius: 50%; 
@@ -1025,11 +890,6 @@ def display_tiktok_post(post):
                     st.markdown(f"<span class='hashtag-chip'>#{tag.strip()}</span>", 
                               unsafe_allow_html=True)
         
-        # Sound info (if available)
-        if sound_id:
-            st.markdown(f"<div style='margin: 10px 0; color: {THEME_CONFIG['theme']['secondary']};'>🎵 Original Sound</div>", 
-                       unsafe_allow_html=True)
-        
         st.markdown("---")
 
 def discover_page():
@@ -1051,10 +911,10 @@ def discover_page():
     if trending_hashtags:
         cols = st.columns(3)
         for idx, hashtag in enumerate(trending_hashtags):
-            tag, count, score = hashtag
+            tag, count = hashtag
             with cols[idx % 3]:
                 st.markdown(f"<div class='hashtag-chip'>#{tag}</div>", unsafe_allow_html=True)
-                st.caption(f"{count:,} posts")
+                st.caption(f"{count} posts")
     
     # Suggested accounts
     st.markdown("### 👥 Suggested For You")
@@ -1068,7 +928,7 @@ def discover_page():
             with cols[idx % 3]:
                 if profile_pic:
                     try:
-                        st.image(profile_pic, width=80)
+                        display_image_safely(profile_pic, width=80)
                     except:
                         st.markdown(f"""
                         <div style='width: 80px; height: 80px; border-radius: 50%; 
@@ -1104,17 +964,20 @@ def create_content_page():
     """Content creation page"""
     st.markdown("<h1 style='text-align: center;'>➕ Create</h1>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["🎥 Upload", "📝 Post", "✨ Effects"])
+    tab1, tab2 = st.tabs(["🎥 Upload", "📝 Post"])
     
     with tab1:
-        st.markdown("### Upload Video")
+        st.markdown("### Upload Video/Image")
         
-        uploaded_file = st.file_uploader("Choose a video file", 
-                                        type=['mp4', 'mov', 'avi', 'mkv'],
-                                        help="Max 100MB, 5 minutes")
+        uploaded_file = st.file_uploader("Choose a file", 
+                                        type=['mp4', 'mov', 'avi', 'mkv', 'jpg', 'png', 'jpeg', 'gif'],
+                                        help="Max 100MB")
         
         if uploaded_file:
-            st.video(uploaded_file)
+            if uploaded_file.type.startswith('video'):
+                st.video(uploaded_file)
+            else:
+                st.image(uploaded_file)
             
             with st.form("upload_form"):
                 caption = st.text_area("Caption", 
@@ -1123,9 +986,6 @@ def create_content_page():
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    allow_duets = st.checkbox("Allow Duets", value=True)
-                    allow_stitches = st.checkbox("Allow Stitches", value=True)
-                with col2:
                     visibility = st.selectbox("Visibility", ["Public", "Friends", "Private"])
                     location = st.text_input("Location", placeholder="Add location")
                 
@@ -1137,7 +997,7 @@ def create_content_page():
                         for tag in suggested_tags[:5]:
                             st.markdown(f"<span class='hashtag-chip'>#{tag}</span>", unsafe_allow_html=True)
                 
-                if st.form_submit_button("Post Video", use_container_width=True):
+                if st.form_submit_button("Post", use_container_width=True):
                     if caption:
                         with st.spinner("Uploading..."):
                             media_data = uploaded_file.read()
@@ -1149,7 +1009,7 @@ def create_content_page():
                             )
                             
                             if success:
-                                st.success("🎉 Video posted successfully!")
+                                st.success("🎉 Posted successfully!")
                                 time.sleep(2)
                                 st.rerun()
                             else:
@@ -1168,13 +1028,7 @@ def create_content_page():
             media_file = st.file_uploader("Add Photo/Video", 
                                          type=['jpg', 'png', 'jpeg', 'mp4', 'gif'])
             
-            col1, col2 = st.columns(2)
-            with col1:
-                add_music = st.checkbox("Add Sound")
-                add_effects = st.checkbox("Add Effects")
-            with col2:
-                allow_comments = st.checkbox("Allow Comments", value=True)
-                location = st.text_input("Location", placeholder="Add location")
+            location = st.text_input("Location", placeholder="Add location")
             
             if st.form_submit_button("Post", use_container_width=True):
                 if content:
@@ -1193,38 +1047,15 @@ def create_content_page():
                         st.error(result)
                 else:
                     st.error("Please write something to post")
-    
-    with tab3:
-        st.markdown("### ✨ Effects & Filters")
-        
-        effects = [
-            {"name": "Beauty", "icon": "💄", "desc": "Smooth skin filter"},
-            {"name": "Funny", "icon": "😂", "desc": "Comedy effects"},
-            {"name": "AR", "icon": "👓", "desc": "Augmented reality"},
-            {"name": "Green Screen", "icon": "🟢", "desc": "Background effects"},
-            {"name": "Time Warp", "icon": "⏰", "desc": "Slow/fast motion"},
-            {"name": "Voice", "icon": "🎤", "desc": "Voice effects"},
-        ]
-        
-        cols = st.columns(3)
-        for idx, effect in enumerate(effects):
-            with cols[idx % 3]:
-                st.markdown(f"<div style='text-align: center; padding: 20px; background: {THEME_CONFIG['theme']['surface_light']}; border-radius: 12px;'>", unsafe_allow_html=True)
-                st.markdown(f"<div style='font-size: 48px;'>{effect['icon']}</div>", unsafe_allow_html=True)
-                st.markdown(f"**{effect['name']}**")
-                st.caption(effect['desc'])
-                if st.button("Try", key=f"effect_{idx}", use_container_width=True):
-                    st.info(f"Opening {effect['name']} effect...")
-                st.markdown("</div>", unsafe_allow_html=True)
 
 def profile_page_tiktok():
     """TikTok-style profile page"""
     user = get_user(st.session_state.user_id)
     
     if user:
-        (user_id, username, display_name, password_hash, email, profile_pic, bio, location, 
-         timezone, language, is_online, last_seen, created_at, post_count, follower_count, 
-         following_count, total_likes, verified, private_account, tiktok_style) = user
+        (user_id, username, display_name, email, profile_pic, bio, location, 
+         timezone, language, is_online, last_seen, created_at, post_count, 
+         follower_count, following_count, total_likes, verified) = user
         
         # Profile header
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -1232,7 +1063,7 @@ def profile_page_tiktok():
         with col1:
             if profile_pic:
                 try:
-                    st.image(profile_pic, width=100)
+                    display_image_safely(profile_pic, width=100)
                 except:
                     st.markdown(f"""
                     <div style='width: 100px; height: 100px; border-radius: 50%; 
@@ -1293,17 +1124,17 @@ def profile_page_tiktok():
         if user_posts:
             cols = st.columns(3)
             for idx, post in enumerate(user_posts):
-                if len(post) > 25:  # Check if post has enough elements
+                if len(post) > 14:  # Check if post has enough elements
                     with cols[idx % 3]:
                         try:
                             if post[3] and 'image' in post[3]:  # media_type
                                 if post[4]:  # media_data
-                                    st.image(post[4], use_container_width=True)
-                                    st.caption(f"❤️ {post[11]} 💬 {post[12]}")
+                                    display_image_safely(post[4], use_container_width=True)
+                                    st.caption(f"❤️ {post[9]} 💬 {post[10]}")
                             elif post[3] and 'video' in post[3]:
                                 if post[4]:  # media_data
                                     st.video(post[4])
-                                    st.caption(f"❤️ {post[11]} 💬 {post[12]}")
+                                    st.caption(f"❤️ {post[9]} 💬 {post[10]}")
                         except:
                             pass
         
@@ -1316,11 +1147,7 @@ def profile_page_tiktok():
                 new_bio = st.text_area("Bio", value=bio or "", height=100)
                 new_location = st.text_input("Location", value=location or "")
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    new_profile_pic = st.file_uploader("Profile Picture", type=['jpg', 'png', 'jpeg'])
-                with col2:
-                    private = st.checkbox("Private Account", value=private_account)
+                new_profile_pic = st.file_uploader("Profile Picture", type=['jpg', 'png', 'jpeg'])
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -1335,18 +1162,18 @@ def profile_page_tiktok():
                         st.rerun()
 
 # ===================================
-# MAIN APPLICATION WITH MOBILE SUPPORT
+# MAIN APPLICATION
 # ===================================
 
 def main():
     """Main application with TikTok features"""
     
-    # Page configuration for mobile
+    # Page configuration
     st.set_page_config(
         page_title="ClipSphere",
         page_icon="🎬",
         layout="wide",
-        initial_sidebar_state="collapsed"  # Collapsed for mobile
+        initial_sidebar_state="collapsed"
     )
     
     # Inject TikTok CSS
@@ -1388,6 +1215,7 @@ def main():
                                 st.session_state.user_id = user_id
                                 st.session_state.username = username
                                 st.session_state.logged_in = True
+                                update_user_online_status(user_id, True)
                                 st.success(f"Welcome back, @{username}!")
                                 time.sleep(1)
                                 st.rerun()
@@ -1424,7 +1252,10 @@ def main():
     page = query_params.get("page", ["feed"])[0]
     st.session_state.current_page = page
     
-    # Mobile navigation (shown at bottom on mobile)
+    # Update online status
+    update_user_online_status(st.session_state.user_id, True)
+    
+    # Mobile navigation
     st.markdown("""
     <div class="mobile-nav">
         <a href="?page=feed" class="mobile-nav-item %s">
@@ -1439,10 +1270,6 @@ def main():
             <span style="font-size: 24px;">➕</span>
             <span>Create</span>
         </a>
-        <a href="?page=messages" class="mobile-nav-item %s">
-            <span style="font-size: 24px;">💬</span>
-            <span>Inbox</span>
-        </a>
         <a href="?page=profile" class="mobile-nav-item %s">
             <span style="font-size: 24px;">👤</span>
             <span>Profile</span>
@@ -1452,7 +1279,6 @@ def main():
         "active" if page == "feed" else "",
         "active" if page == "discover" else "",
         "active" if page == "create" else "",
-        "active" if page == "messages" else "",
         "active" if page == "profile" else ""
     ), unsafe_allow_html=True)
     
@@ -1468,7 +1294,7 @@ def main():
     else:
         tiktok_feed_page()
     
-    # Desktop sidebar (hidden on mobile via CSS)
+    # Desktop sidebar
     with st.sidebar:
         st.markdown("<h2 style='text-align: center;'>🎬 ClipSphere</h2>", unsafe_allow_html=True)
         st.markdown(f"### 👋 @{st.session_state.username}")
@@ -1503,23 +1329,15 @@ def main():
         if user_data:
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Followers", user_data[15])  # follower_count
+                st.metric("Followers", user_data[13])  # follower_count
             with col2:
-                st.metric("Likes", user_data[17])  # total_likes
+                st.metric("Likes", user_data[15])  # total_likes
         
         st.markdown("---")
         
         # Logout
         if st.button("🚪 Logout", use_container_width=True):
-            # Update online status
-            try:
-                c = conn.cursor()
-                c.execute("UPDATE users SET is_online=0 WHERE id=?", (st.session_state.user_id,))
-                conn.commit()
-            except:
-                pass
-            
-            # Clear session
+            update_user_online_status(st.session_state.user_id, False)
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.query_params = {}
